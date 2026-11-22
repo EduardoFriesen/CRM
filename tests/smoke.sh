@@ -31,6 +31,9 @@ for k in X-Content-Type-Options:\ nosniff X-Frame-Options Referrer-Policy; do
 done
 echo "$h" | grep -i '^server:' | grep -qE '[0-9]' && bad "Server header has no version" "$(echo "$h" | grep -i '^server:')" || ok "Server header has no version"
 
+c=$(code -X POST -H 'Host: flowise.localhost' $B/api/v1/prediction/x)
+[ "$c" = 403 ] && ok "flowise public prediction blocked" || bad "flowise public prediction blocked" "$c"
+
 c=$(code -H 'Host: foo.localhost' $B/)
 { [ "$c" = 444 ] || [ "$c" = 000 ]; } && ok "unknown host dropped ($c)" || bad "unknown host dropped" "$c"
 
