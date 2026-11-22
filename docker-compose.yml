@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgres:17.12-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing POSTGRES_PASSWORD}
+      EVOLUTION_DB_PASSWORD: ${EVOLUTION_DB_PASSWORD:?missing EVOLUTION_DB_PASSWORD}
+      FLOWISE_DB_PASSWORD: ${FLOWISE_DB_PASSWORD:?missing FLOWISE_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+
+  redis:
+    image: redis:8.8.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SERVER_URL: http://evolution.localhost
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?missing EVOLUTION_API_KEY}
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD:?missing EVOLUTION_DB_PASSWORD}@postgres:5432/evolution?schema=public
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/1
+      CACHE_LOCAL_ENABLED: "false"
+      FLOWISE_ENABLED: "true"
+      LOG_LEVEL: ERROR,WARN,INFO
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks: [backend]
+
+  flowise:
+    image: flowiseai/flowise:3.1.4
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_TYPE: postgres
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: flowise
+      DATABASE_USER: flowise
+      DATABASE_PASSWORD: ${FLOWISE_DB_PASSWORD:?missing FLOWISE_DB_PASSWORD}
+      FLOWISE_SECRETKEY_OVERWRITE: ${FLOWISE_SECRETKEY_OVERWRITE:?missing FLOWISE_SECRETKEY_OVERWRITE}
+      JWT_AUTH_TOKEN_SECRET: ${FLOWISE_JWT_AUTH_TOKEN_SECRET:?missing FLOWISE_JWT_AUTH_TOKEN_SECRET}
+      JWT_REFRESH_TOKEN_SECRET: ${FLOWISE_JWT_REFRESH_TOKEN_SECRET:?missing FLOWISE_JWT_REFRESH_TOKEN_SECRET}
+      EXPRESS_SESSION_SECRET: ${FLOWISE_EXPRESS_SESSION_SECRET:?missing FLOWISE_EXPRESS_SESSION_SECRET}
+      TOKEN_HASH_SECRET: ${FLOWISE_TOKEN_HASH_SECRET:?missing FLOWISE_TOKEN_HASH_SECRET}
+      APP_URL: http://flowise.localhost
+      SECURE_COOKIES: "false"
+    volumes:
+      - flowise_data:/root/.flowise
+    networks: [backend]
+
+  nginx:
+    image: nginx:1.30.7-alpine
+    restart: unless-stopped
+    depends_on: [evolution-api, flowise]
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks: [backend]
+
+networks:
+  backend:
+
+volumes:
+  postgres_data:
+  redis_data:
+  evolution_instances:
+  flowise_data:
