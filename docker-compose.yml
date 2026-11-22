@@ -10,7 +10,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -48,8 +48,18 @@ services:
       CACHE_LOCAL_ENABLED: "false"
       FLOWISE_ENABLED: "true"
       LOG_LEVEL: ERROR,WARN,INFO
+      # The image's /evolution/.env turns these on; override explicitly.
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      TELEMETRY_ENABLED: "false"
     volumes:
       - evolution_instances:/evolution/instances
+    # Evolution console.logs raw messages regardless of LOG_LEVEL; cap and rotate.
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks: [backend]
 
   flowise:
@@ -72,6 +82,8 @@ services:
       TOKEN_HASH_SECRET: ${FLOWISE_TOKEN_HASH_SECRET:?missing FLOWISE_TOKEN_HASH_SECRET}
       APP_URL: http://flowise.localhost:${HTTP_PORT:-8080}
       SECURE_COOKIES: "false"
+      TRUST_PROXY: "1"
+      IFRAME_ORIGINS: "'self'"
     volumes:
       - flowise_data:/root/.flowise
     networks: [backend]
