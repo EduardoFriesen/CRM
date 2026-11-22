@@ -38,7 +38,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      SERVER_URL: http://evolution.localhost
+      SERVER_URL: http://evolution.localhost:${HTTP_PORT:-8080}
       AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?missing EVOLUTION_API_KEY}
       DATABASE_PROVIDER: postgresql
       DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD:?missing EVOLUTION_DB_PASSWORD}@postgres:5432/evolution?schema=public
@@ -70,7 +70,7 @@ services:
       JWT_REFRESH_TOKEN_SECRET: ${FLOWISE_JWT_REFRESH_TOKEN_SECRET:?missing FLOWISE_JWT_REFRESH_TOKEN_SECRET}
       EXPRESS_SESSION_SECRET: ${FLOWISE_EXPRESS_SESSION_SECRET:?missing FLOWISE_EXPRESS_SESSION_SECRET}
       TOKEN_HASH_SECRET: ${FLOWISE_TOKEN_HASH_SECRET:?missing FLOWISE_TOKEN_HASH_SECRET}
-      APP_URL: http://flowise.localhost
+      APP_URL: http://flowise.localhost:${HTTP_PORT:-8080}
       SECURE_COOKIES: "false"
     volumes:
       - flowise_data:/root/.flowise
@@ -81,7 +81,7 @@ services:
     restart: unless-stopped
     depends_on: [evolution-api, flowise]
     ports:
-      - "127.0.0.1:80:80"
+      - "127.0.0.1:${HTTP_PORT:-8080}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     networks: [backend]
