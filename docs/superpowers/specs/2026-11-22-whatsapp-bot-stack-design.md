@@ -58,7 +58,7 @@ Servicios (imágenes con versión exacta fijada, nunca `latest`):
 ## Datos personales (Ley 25.326)
 - Evolution guarda solo lo necesario para operar (instancia, contactos, chats); **no guarda el historial de mensajes** (`DATABASE_SAVE_DATA_NEW_MESSAGE=false`). *Decisión propia; revisable si la app del CRM necesita el historial.*
 - La memoria de conversación vive en Flowise; la política de retención y borrado se define cuando exista la app del CRM.
-- Logs de contenedores sin contenido de mensajes (nivel de log de Evolution en `ERROR,WARN,INFO`).
+- Los logs del contenedor de Evolution **sí contienen mensajes y números** (hay un `console.log` incondicional que ignora `LOG_LEVEL`). Mitigación: rotación `local` 10 MB x 3 archivos (~30 MB); purga recreando el contenedor (`docker compose rm`). Además se fuerzan en `false` `DATABASE_SAVE_DATA_HISTORIC`, `DATABASE_SAVE_MESSAGE_UPDATE` y `TELEMETRY_ENABLED`, que la imagen activa por defecto.
 
 ## Verificación
 - `docker compose config` válido.
