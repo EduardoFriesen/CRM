@@ -38,6 +38,12 @@ export const productInput = z.object({
   ),
   stock: optionalStock,
   active: activeFlag,
+  // The stock the edit form was loaded with. Orders change stock concurrently, so an edit
+  // only writes stock when the user changed it, and only if it still holds this value.
+  loadedStock: z.preprocess(
+    (v) => (v === undefined ? undefined : v === "" || v === null ? null : v),
+    z.union([z.undefined(), z.null(), z.coerce.number().int().min(0)]),
+  ),
 });
 
 const productId = z.uuid();
@@ -47,8 +53,8 @@ function parse(input: unknown) {
   if (!parsed.success) {
     return { error: fail<Product>("VALIDATION", "Revisá los datos del producto", z.flattenError(parsed.error).fieldErrors) };
   }
-  const { price, ...rest } = parsed.data;
-  return { values: { ...rest, price: price.toFixed(2) } };
+  const { price, loadedStock, ...rest } = parsed.data;
+  return { values: { ...rest, price: price.toFixed(2) }, loadedStock };
 }
 
 export function listProducts(tenantId: string): Promise<Product[]> {
@@ -68,14 +74,30 @@ export async function updateProduct(tenantId: string, id: string, input: unknown
   if (!productId.safeParse(id).success) return fail("NOT_FOUND", "No encontramos ese producto");
   const p = parse(input);
   if (p.error) return p.error;
-  const [row] = await withTenant(tenantId, (tx) =>
-    tx
+  const { stock, ...others } = p.values;
+  const loaded = p.loadedStock;
+  const stockChanged = loaded === undefined || stock !== loaded;
+  return withTenant(tenantId, async (tx) => {
+    const [row] = await tx
       .update(products)
-      .set({ ...p.values, updatedAt: sql`now()` })
-      .where(and(eq(products.id, id), eq(products.tenantId, tenantId)))
-      .returning(),
-  );
-  return row ? ok(row) : fail("NOT_FOUND", "No encontramos ese producto");
+      .set({ ...others, ...(stockChanged ? { stock } : {}), updatedAt: sql`now()` })
+      .where(
+        and(
+          eq(products.id, id),
+          eq(products.tenantId, tenantId),
+          stockChanged && loaded !== undefined ? sql`${products.stock} is not distinct from ${loaded}` : undefined,
+        ),
+      )
+      .returning();
+    if (row) return ok(row);
+    const [current] = await tx.select({ stock: products.stock }).from(products).where(eq(products.id, id));
+    if (!current) return fail<Product>("NOT_FOUND", "No encontramos ese producto");
+    return fail<Product>(
+      "CONFLICT",
+      `El stock cambió mientras editabas (ahora ${current.stock ?? "sin control"}). Revisalo y guardá de nuevo.`,
+      { currentStock: current.stock },
+    );
+  });
 }
 
 export async function setProductActive(tenantId: string, id: string, active: boolean): Promise<Result<Product>> {

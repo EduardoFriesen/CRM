@@ -104,7 +104,14 @@ export async function createOrder(tenantId: string, input: unknown): Promise<Res
 
       const lines = found.map((p) => {
         const q = qty.get(p.id)!;
-        return { productId: p.id, productName: p.name, unitPrice: p.price, quantity: q, lineTotal: money(Number(p.price) * q) };
+        return {
+          productId: p.id,
+          productName: p.name,
+          unitPrice: p.price,
+          quantity: q,
+          lineTotal: money(Number(p.price) * q),
+          stockTaken: p.stock !== null,
+        };
       });
       const total = money(lines.reduce((sum, l) => sum + Number(l.lineTotal), 0));
       const [order] = await tx
@@ -160,7 +167,7 @@ export async function cancelOrder(tenantId: string, id: string): Promise<Result<
     const lines = await tx
       .select({ productId: orderItems.productId, quantity: orderItems.quantity })
       .from(orderItems)
-      .where(and(eq(orderItems.orderId, o.id), isNotNull(orderItems.productId)));
+      .where(and(eq(orderItems.orderId, o.id), isNotNull(orderItems.productId), eq(orderItems.stockTaken, true)));
     for (const l of lines) {
       await tx
         .update(products)

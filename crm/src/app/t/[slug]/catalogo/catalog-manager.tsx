@@ -14,6 +14,7 @@ const toValues = (p: Product) => ({
   price: String(Number(p.price)).replace(".", ","),
   stock: p.stock === null ? "" : String(p.stock),
   active: p.active,
+  loadedStock: p.stock === null ? "" : String(p.stock),
 });
 
 export function CatalogManager({ slug, products }: { slug: string; products: Product[] }) {
@@ -39,6 +40,7 @@ export function CatalogManager({ slug, products }: { slug: string; products: Pro
         <h2 id="product-form-title">{editing ? `Editar ${editing.name}` : "Nuevo producto"}</h2>
         <form key={formKey} action={action} className="product-form" noValidate>
           {editing && <input type="hidden" name="id" value={editing.id} />}
+          {editing && <input type="hidden" name="loadedStock" value={values?.loadedStock ?? ""} />}
           <Field name="name" label="Nombre" errors={errors} defaultValue={values?.name} required />
           <Field name="price" label="Precio" errors={errors} defaultValue={values?.price} hint="En pesos. Ej. 2.500 o 2.500,50" inputMode="decimal" required />
           <Field name="stock" label="Stock" errors={errors} defaultValue={values?.stock} hint="Vacío = no controlar stock. El bot nunca dice la cantidad." inputMode="numeric" />

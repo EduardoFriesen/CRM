@@ -99,6 +99,13 @@
       "when": 1795459627391,
       "tag": "0013_orders_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795460314557,
+      "tag": "0014_order_items_stock_taken",
+      "breakpoints": true
     }
   ]
 }

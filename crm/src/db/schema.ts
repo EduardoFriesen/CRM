@@ -189,6 +189,8 @@ export const orderItems = pgTable(
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     quantity: integer().notNull(),
     lineTotal: numeric("line_total", { precision: 12, scale: 2 }).notNull(),
+    // true when creating the order decremented the product's stock; cancel returns only these.
+    stockTaken: boolean("stock_taken").notNull().default(false),
   },
   (t) => [check("order_items_quantity_check", sql`${t.quantity} > 0`)],
 );

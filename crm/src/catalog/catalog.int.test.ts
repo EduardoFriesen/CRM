@@ -48,6 +48,40 @@ describe("catalog CRUD", () => {
   });
 });
 
+describe("catalog edits vs. orders", () => {
+  it("keeps the stock an order took when an edit leaves stock untouched", async () => {
+    const t = await makeTenant();
+    const p = ok(await createProduct(t.id, { name: "Pan", price: "100", stock: "10" }));
+    await ownerSql`update products set stock = 8 where id = ${p.id}`; // an order took 2 meanwhile
+    expect(await updateProduct(t.id, p.id, { name: "Pan", price: "120", stock: "10", loadedStock: "10" })).toMatchObject({
+      success: true,
+      data: { price: "120.00", stock: 8 },
+    });
+  });
+
+  it("refuses a stock change made on a stale value", async () => {
+    const t = await makeTenant();
+    const p = ok(await createProduct(t.id, { name: "Pan", price: "100", stock: "10" }));
+    await ownerSql`update products set stock = 8 where id = ${p.id}`;
+    expect(await updateProduct(t.id, p.id, { name: "Pan", price: "100", stock: "15", loadedStock: "10" })).toEqual({
+      success: false,
+      error: {
+        code: "CONFLICT",
+        message: "El stock cambió mientras editabas (ahora 8). Revisalo y guardá de nuevo.",
+        details: { currentStock: 8 },
+      },
+    });
+  });
+
+  it("applies a stock change when nothing moved meanwhile", async () => {
+    const t = await makeTenant();
+    const p = ok(await createProduct(t.id, { name: "Pan", price: "100", stock: "10" }));
+    expect(await updateProduct(t.id, p.id, { name: "Pan", price: "100", stock: "15", loadedStock: "10" })).toMatchObject({
+      data: { stock: 15 },
+    });
+  });
+});
+
 describe("searchCatalog", () => {
   it("matches words ignoring case and accents, hides paused and foreign products, never exposes stock", async () => {
     const t = await makeTenant();

@@ -124,6 +124,17 @@ describe("deliver and cancel", () => {
     expect(await deliverOrder(t.id, r.data.id)).toMatchObject({ error: { code: "VALIDATION" } });
   });
 
+  it("only returns stock that the order actually took", async () => {
+    const t = await makeTenant();
+    const torta = await product(t.id, "Torta", 100, null);
+    const c = await buyer(t.id);
+    const r = await createOrder(t.id, input(c, [{ productId: torta, quantity: 2 }]));
+    if (!r.success) throw new Error("setup");
+    await ownerSql`update products set stock = 10 where id = ${torta}`;
+    await cancelOrder(t.id, r.data.id);
+    expect(await stockOf(torta)).toBe(10);
+  });
+
   it("never shows another tenant's orders", async () => {
     const a = await makeTenant();
     const b = await makeTenant();
