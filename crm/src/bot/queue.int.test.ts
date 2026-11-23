@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { closeReplyQueue, enqueueReply, getReplyQueue } from "@/bot/queue";
+import { closeReplyQueue, enqueueCheckAdmin, enqueueRelay, enqueueReply, getReplyQueue } from "@/bot/queue";
 
 afterAll(async () => {
   await getReplyQueue().obliterate({ force: true });
@@ -13,5 +13,13 @@ describe("enqueueReply", () => {
     await enqueueReply("t-1", "c-1");
     await enqueueReply("t-1", "c-2");
     expect(await getReplyQueue().getJobCounts("delayed")).toEqual({ delayed: 2 });
+  });
+
+  it("queues each relay once and delays the admin-typing check", async () => {
+    await getReplyQueue().obliterate({ force: true });
+    await enqueueRelay("t-1", "esc-1");
+    await enqueueRelay("t-1", "esc-1");
+    await enqueueCheckAdmin("t-1", "c-1", "W1");
+    expect(await getReplyQueue().getJobCounts("wait", "delayed")).toEqual({ wait: 1, delayed: 1 });
   });
 });

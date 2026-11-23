@@ -3,7 +3,12 @@ import { Queue } from "bullmq";
 export const REPLY_QUEUE = "bot-replies";
 export const DEBOUNCE_MS = 8000;
 export const REMINDER_DELAY_MS = 2 * 60 * 60 * 1000;
+export const CHECK_ADMIN_DELAY_MS = 10_000;
 export type ReplyJob = { tenantId: string; contactId: string };
+export type EscalationJob = { tenantId: string; escalationId: string };
+export type CheckAdminJob = { tenantId: string; contactId: string; waMessageId: string };
+// Job names: "reply" | "relay" | "remind" | "check-admin" (the worker dispatches on them).
+export type BotJobData = ReplyJob | EscalationJob | CheckAdminJob;
 
 export function redisConnection() {
   const url = process.env.REDIS_URL;
@@ -19,15 +24,15 @@ export function redisConnection() {
   };
 }
 
-let queue: Queue<ReplyJob> | undefined;
+let queue: Queue<BotJobData> | undefined;
 
 const ENQUEUE_TIMEOUT_MS = 1500;
 
 const codeOf = (e: unknown) => String((e as { code?: unknown } | null)?.code ?? (e as Error | null)?.name ?? "unknown");
 
-export function getReplyQueue(): Queue<ReplyJob> {
+export function getReplyQueue(): Queue<BotJobData> {
   if (!queue) {
-    queue = new Queue<ReplyJob>(REPLY_QUEUE, { connection: redisConnection() });
+    queue = new Queue<BotJobData>(REPLY_QUEUE, { connection: redisConnection() });
     // Without a listener ioredis prints full connection errors on every retry.
     queue.on("error", (e) => console.error(`reply queue error: ${codeOf(e)}`));
   }
@@ -74,9 +79,34 @@ async function addWithTimeout(promise: Promise<unknown>): Promise<void> {
 // One reminder per escalation, 2 h later (the worker sends it only if still pending).
 export async function enqueueReminder(tenantId: string, escalationId: string): Promise<void> {
   await addWithTimeout(
-    getReplyQueue().add("remind", { tenantId, escalationId } as never, {
+    getReplyQueue().add("remind", { tenantId, escalationId }, {
       delay: REMINDER_DELAY_MS,
-      jobId: `remind:${escalationId}`,
+      jobId: `remind-${escalationId}`,
+      removeOnComplete: 1000,
+      removeOnFail: 1000,
+    }),
+  );
+}
+
+// Sends the admin's answer to the customer; one job per escalation.
+export async function enqueueRelay(tenantId: string, escalationId: string): Promise<void> {
+  await addWithTimeout(
+    getReplyQueue().add("relay", { tenantId, escalationId }, {
+      jobId: `relay-${escalationId}`,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 5000 },
+      removeOnComplete: 1000,
+      removeOnFail: 1000,
+    }),
+  );
+}
+
+// 10 s later, a fromMe message still authored "admin" was typed by a person (the bot
+// claims its own messages by id), so the chat gets paused.
+export async function enqueueCheckAdmin(tenantId: string, contactId: string, waMessageId: string): Promise<void> {
+  await addWithTimeout(
+    getReplyQueue().add("check-admin", { tenantId, contactId, waMessageId }, {
+      delay: CHECK_ADMIN_DELAY_MS,
       removeOnComplete: 1000,
       removeOnFail: 1000,
     }),

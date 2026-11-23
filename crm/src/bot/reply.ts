@@ -3,7 +3,7 @@ import { and, desc, eq, gt, max, sql } from "drizzle-orm";
 import { getAgentRuntime, markKeyInvalid, recordAgentError } from "@/agent/config";
 import { createModel, isAuthError } from "@/agent/model";
 import { withTenant } from "@/db/client";
-import { contacts, messages, tenants, whatsappInstances } from "@/db/schema";
+import { contacts, escalations, messages, tenants, whatsappInstances } from "@/db/schema";
 import { EvolutionError, sendText } from "@/whatsapp/evolution";
 import { recentFacts } from "@/facts/facts";
 import { notifyAdmin } from "./admin-messages";
@@ -24,7 +24,8 @@ export type ConversationOutcome =
   | "skipped:key-invalid"
   | "skipped:empty"
   | "skipped:model-error"
-  | "skipped:paused";
+  | "skipped:paused"
+  | "skipped:not-answered";
 
 // Cuts at the last sentence end (". ") or line break before the limit. A bare "." is not
 // a boundary: es-AR prices use it for thousands ("$12.500").
@@ -74,6 +75,54 @@ async function loadConversation(tenantId: string, contactId: string, now: Date) 
   });
 }
 
+// Sends a bot message and records it. The webhook's fromMe echo may already have
+// stored this id as "admin": the upsert claims it for the bot.
+async function deliver(
+  tenantId: string,
+  contactId: string,
+  to: { instance: string; jid: string },
+  text: string,
+  sentAt: Date,
+  send: typeof sendText,
+): Promise<void> {
+  let sent: { id: string };
+  try {
+    sent = await send(to.instance, to.jid, text);
+  } catch (e) {
+    await recordAgentError(tenantId, errorCode(e));
+    throw e;
+  }
+  await withTenant(tenantId, (tx) =>
+    tx
+      .insert(messages)
+      .values({ tenantId, contactId, direction: "out", author: "bot", body: text, waMessageId: sent.id, sentAt })
+      .onConflictDoUpdate({ target: [messages.tenantId, messages.waMessageId], set: { author: "bot", sentAt } }),
+  );
+  await withTenant(tenantId, (tx) =>
+    tx.update(contacts).set({ lastMessageAt: sql`greatest(${contacts.lastMessageAt}, now())` }).where(eq(contacts.id, contactId)),
+  );
+}
+
+async function generateOrRecord(
+  tenantId: string,
+  rt: { pauseHours: number } & Parameters<typeof createModel>[0],
+  model: LanguageModel | undefined,
+  args: Parameters<typeof generateAgentText>[1],
+): Promise<string | "skipped:key-invalid" | "skipped:model-error"> {
+  try {
+    return await generateAgentText(model ?? (await createModel(rt)), args);
+  } catch (e) {
+    await recordAgentError(tenantId, errorCode(e));
+    if (isAuthError(e)) {
+      await markKeyInvalid(tenantId);
+      return "skipped:key-invalid";
+    }
+    // Permanent errors (bad request, unknown model…) are recorded, not retried.
+    if (APICallError.isInstance(e) && !e.isRetryable) return "skipped:model-error";
+    throw e;
+  }
+}
+
 // One bot turn for a contact: decides whether to answer, asks the tenant's model with
 // catalog/stage tools, sends the reply over WhatsApp and records it as the bot's.
 export async function runConversation(
@@ -107,26 +156,17 @@ export async function runConversation(
     content: m.body,
   }));
 
-  let reply: string;
-  try {
-    const model = deps.model ?? (await createModel(rt));
-    reply = await generateAgentText(model, { system, messages: history, tools: makeTools(tenantId, contactId, {
-        dryRun: false,
-        notify: (t) => notifyAdmin(tenantId, t, { send }),
-        scheduleReminder: deps.scheduleReminder ?? ((id) => enqueueReminder(tenantId, id)),
-        pauseHours: rt.pauseHours,
-      }),
-    });
-  } catch (e) {
-    await recordAgentError(tenantId, errorCode(e));
-    if (isAuthError(e)) {
-      await markKeyInvalid(tenantId);
-      return "skipped:key-invalid";
-    }
-    // Permanent errors (bad request, unknown model…) are recorded, not retried.
-    if (APICallError.isInstance(e) && !e.isRetryable) return "skipped:model-error";
-    throw e;
-  }
+  const reply = await generateOrRecord(tenantId, rt, deps.model, {
+    system,
+    messages: history,
+    tools: makeTools(tenantId, contactId, {
+      dryRun: false,
+      notify: (t) => notifyAdmin(tenantId, t, { send }),
+      scheduleReminder: deps.scheduleReminder ?? ((id) => enqueueReminder(tenantId, id)),
+      pauseHours: rt.pauseHours,
+    }),
+  });
+  if (reply === "skipped:key-invalid" || reply === "skipped:model-error") return reply;
 
   const text = truncateForWhatsApp(reply.trim());
   if (!text) return "skipped:empty";
@@ -143,34 +183,47 @@ export async function runConversation(
   );
   if (adminSince) return "skipped:not-customer-last";
 
-  let sent: { id: string };
-  try {
-    sent = await send(conv.instance.name, conv.contact.jid, text);
-  } catch (e) {
-    await recordAgentError(tenantId, errorCode(e));
-    throw e;
-  }
+  await deliver(tenantId, contactId, { instance: conv.instance.name, jid: conv.contact.jid }, text, new Date(cutoff.getTime() + 1), send);
+  return "sent";
+}
 
-  const repliedAt = new Date(cutoff.getTime() + 1);
-  // The webhook's fromMe echo may already have stored this id as "admin": claim it.
-  await withTenant(tenantId, (tx) =>
-    tx
-      .insert(messages)
-      .values({
-        tenantId,
-        contactId,
-        direction: "out",
-        author: "bot",
-        body: text,
-        waMessageId: sent.id,
-        // Placed right after the last message the reply saw, so a customer message that
-        // arrived during generation stays "last" and is answered by the follow-up job.
-        sentAt: repliedAt,
-      })
-      .onConflictDoUpdate({ target: [messages.tenantId, messages.waMessageId], set: { author: "bot", sentAt: repliedAt } }),
+// Tells the customer what the admin answered to an escalation, in the agent's voice.
+export async function runRelay(
+  tenantId: string,
+  escalationId: string,
+  deps: { send?: typeof sendText; now?: Date; model?: LanguageModel } = {},
+): Promise<ConversationOutcome> {
+  const now = deps.now ?? new Date();
+  const send = deps.send ?? sendText;
+  const rt = await getAgentRuntime(tenantId);
+  if (!rt || !rt.enabled || rt.keyStatus === "invalid") return "skipped:disabled";
+
+  const [esc] = await withTenant(tenantId, (tx) =>
+    tx.select().from(escalations).where(and(eq(escalations.id, escalationId), eq(escalations.status, "answered"))),
   );
-  await withTenant(tenantId, (tx) =>
-    tx.update(contacts).set({ lastMessageAt: sql`greatest(${contacts.lastMessageAt}, now())` }).where(eq(contacts.id, contactId)),
-  );
+  if (!esc?.answer) return "skipped:not-answered";
+
+  const conv = await loadConversation(tenantId, esc.contactId, now);
+  if (!conv.contact || !conv.instance) return "skipped:disabled";
+  if (conv.contact.botPausedUntil && conv.contact.botPausedUntil > now) return "skipped:paused";
+  if (conv.botLastHour >= MAX_BOT_REPLIES_PER_HOUR) return "skipped:rate-limit";
+
+  const system = buildSystemPrompt({ ...rt, tenantName: conv.tenantName, introduce: false, now, facts: await recentFacts(tenantId) });
+  const firstCustomer = conv.recent.findIndex((m) => m.author === "customer");
+  const history: ModelMessage[] = (firstCustomer >= 0 ? conv.recent.slice(firstCustomer) : []).map((m) => ({
+    role: m.author === "customer" ? "user" : "assistant",
+    content: m.body,
+  }));
+  // Internal note as the last (user) turn: providers expect the conversation to end there.
+  history.push({
+    role: "user",
+    content: `[Nota interna del equipo, no del cliente] El equipo respondió a la consulta "${esc.question}": "${esc.answer}". Comunicáselo al cliente con tus palabras, sin agregar datos.`,
+  });
+
+  const reply = await generateOrRecord(tenantId, rt, deps.model, { system, messages: history, tools: {} });
+  if (reply === "skipped:key-invalid" || reply === "skipped:model-error") return reply;
+  const text = truncateForWhatsApp(reply.trim());
+  if (!text) return "skipped:empty";
+  await deliver(tenantId, esc.contactId, { instance: conv.instance.name, jid: conv.contact.jid }, text, now, send);
   return "sent";
 }
