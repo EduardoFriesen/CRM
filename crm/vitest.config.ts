@@ -8,6 +8,11 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     globalSetup: ["./src/test/global-setup.ts"],
     fileParallelism: false,
-    env: { CRM_TEST_OWNER_URL: testOwnerUrl, DATABASE_URL: testAppUrl },
+    env: {
+      CRM_TEST_OWNER_URL: testOwnerUrl,
+      DATABASE_URL: testAppUrl,
+      // Test-only master key; never used outside the test runner.
+      CRM_ENCRYPTION_KEY: "0f".repeat(32),
+    },
   },
 });
