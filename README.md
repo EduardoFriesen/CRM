@@ -1,6 +1,6 @@
 # CRM - Bot de WhatsApp con IA
 
-Stack Docker Compose: Evolution API v2.3.7 (WhatsApp) + Flowise 3.1.4 (cerebro IA) + Postgres 17 + Redis 8 + nginx como proxy. El bot recibe mensajes por WhatsApp, Evolution los manda a un chatflow de Flowise y devuelve la respuesta.
+Stack Docker Compose: Evolution API v2.3.7 (WhatsApp) + Postgres 17 + Redis 8 + nginx como proxy. El bot con IA se reconstruye dentro de la app del CRM (entrega 2); por ahora **no responde mensajes**.
 
 ## Requisitos
 
@@ -18,10 +18,9 @@ docker compose up -d
 ```
 
 - Usa siempre `openssl rand -hex 32` (solo hex): la clave de Postgres se interpola sin codificar en una URI de conexion y caracteres como `@ / :` la rompen. Nunca dejes `change-me`: compose solo falla si una variable esta sin definir o vacia, **no detecta** el valor `change-me`.
-- Las claves de base de datos solo se aplican cuando el volumen de Postgres esta vacio. Si las cambias despues, hay que ejecutar `docker compose down -v` (**borra TODOS los datos**: instancias de WhatsApp, chatflows, usuarios de Flowise) o hacer `ALTER ROLE` a mano.
+- Las claves de base de datos solo se aplican cuando el volumen de Postgres esta vacio. Si las cambias despues, hay que ejecutar `docker compose down -v` (**borra TODOS los datos**, incluidas las instancias de WhatsApp) o hacer `ALTER ROLE` a mano.
 - URLs locales (nginx escucha en `127.0.0.1:${HTTP_PORT}`, default 8080, porque Docker rootless no puede usar el puerto 80):
   - Evolution: http://evolution.localhost:8080
-  - Flowise: http://flowise.localhost:8080
   - En un VPS con Docker como root podes poner `HTTP_PORT=80`.
 
 ## Tests
@@ -50,57 +49,34 @@ curl -s $E/instance/connect/bot -H "apikey: $EVOLUTION_API_KEY"
 
 La respuesta trae el QR (`base64`, y `code`). Escanealo desde WhatsApp > Dispositivos vinculados. Estado: `GET /instance/connectionState/bot`.
 
-## 2. Crear el chatflow en Flowise
-
-1. Abri http://flowise.localhost:8080. La primera visita crea la cuenta de administrador: **crea esa cuenta antes de exponer el stack**, porque el primer visitante se queda con ella.
-2. Credenciales: carga la API key del proveedor del modelo (se guarda cifrada en Flowise).
-3. Crea un chatflow con: un chat model (ej. ChatAnthropic o ChatOpenAI), **Buffer Memory** (o similar) y un system prompt con la personalidad del bot. Conectalos en una Conversation Chain y guarda.
-4. Anota el ID del chatflow (esta en la URL) y crea una **API key** en Flowise (menu API Keys). Ademas **asignala al chatflow** (configuracion API/Security del chatflow, campo API Key); crearla no basta. *Ruta de UI no verificada en runtime.*
-
-Evolution manda `sessionId = remoteJid` en `overrideConfig`, asi que cada chat tiene su propia memoria (verificado en `flowise.service.ts`; para que Flowise lo respete, la memoria del chatflow debe aceptar override de Session ID: habilitalo en Security del chatflow, **no verificado en runtime**).
-
-## 3. Registrar el bot en Evolution
-
-Ruta `POST /flowise/create/{instance}`; campos verificados en `flowise.router.ts`, `flowise.dto.ts` y `flowise.schema.ts` (requeridos: `enabled`, `apiUrl`, `triggerType`).
-
-```bash
-curl -s -X POST $E/flowise/create/bot \
-  -H "apikey: $EVOLUTION_API_KEY" -H 'Content-Type: application/json' \
-  -d '{
-    "enabled": true,
-    "description": "Bot principal",
-    "apiUrl": "http://flowise:3000/api/v1/prediction/<chatflowId>",
-    "apiKey": "<flowise-api-key>",
-    "triggerType": "all",
-    "ignoreJids": ["@g.us", "status@broadcast"],
-    "listeningFromMe": false
-  }'
-```
-
-- `apiUrl` usa la red interna de Docker (`flowise:3000`), no el hostname publico.
-- `triggerType`: `all | keyword | none | advanced`. `ignoreJids: ["@g.us", "status@broadcast"]` evita responder en grupos y a los Estados de los contactos; `groupsIgnore: true` en `/instance/create` refuerza lo de grupos. `listeningFromMe: false` evita que el bot procese sus propios mensajes (bucles).
-- Campos opcionales existentes: `expire` (minutos), `keepOpen`, `keywordFinish`, `delayMessage`, `unknownMessage`, `debounceTime`, `splitMessages`, `timePerChar`, `stopBotFromMe`.
-- Otras rutas: `GET /flowise/find/{instance}`, `PUT /flowise/update/{flowiseId}/{instance}`, `DELETE /flowise/delete/{flowiseId}/{instance}` (derivadas de `routerPath` en el codigo; no probadas en runtime).
-
-## 4. Verificacion manual end to end (pendiente, requiere humano)
+## 2. Verificacion manual end to end (pendiente, requiere humano)
 
 No se ejecuto automaticamente; completar y registrar el resultado en la descripcion del PR:
 
 - [ ] Escanear el QR con el numero dedicado.
-- [ ] Escribirle desde otro telefono y recibir la respuesta de la IA.
 - [ ] Escribir en un grupo donde este el numero: no debe responder.
 - [ ] Reiniciar el stack (`docker compose restart`) y confirmar que la instancia sigue conectada.
 
 ## Notas importantes
 
 - **Riesgo de baneo:** Baileys es un cliente no oficial de WhatsApp Web. Usa un numero dedicado, no el personal ni el de un negocio establecido.
-- Evolution **no guarda historial de mensajes** (`DATABASE_SAVE_DATA_NEW_MESSAGE=false`). La memoria de las conversaciones vive en Flowise.
-- Datos personales (Ley 25.326): la memoria de Flowise contiene conversaciones de usuarios. La politica de retencion y los procesos de acceso/supresion estan **pendientes de definir**.
+- Evolution **no guarda historial de mensajes** (`DATABASE_SAVE_DATA_NEW_MESSAGE=false`).
 - **Logs con datos personales:** Evolution hace un `console.log` incondicional de cada mensaje, asi que los logs del contenedor `evolution-api` **SI contienen mensajes y numeros de telefono**, sin importar `LOG_LEVEL`. Se rotan (3 archivos x 10 MB, tope ~30 MB). Para purgarlos: `docker compose rm -sf evolution-api && docker compose up -d evolution-api` (recrear el contenedor borra sus logs).
-- Todo queda en `127.0.0.1`; para exponerlo hace falta HTTPS delante (y `SECURE_COOKIES=true` en Flowise).
+- Todo queda en `127.0.0.1`; para exponerlo hace falta HTTPS delante.
 
 ## Reset total
 
 ```bash
-docker compose down -v   # ATENCION: borra bases, sesiones de WhatsApp y chatflows
+docker compose down -v   # ATENCION: borra bases y sesiones de WhatsApp
 ```
+
+## Migracion: retirar Flowise de un volumen existente
+
+Flowise ya no forma parte del stack. Si lo tenias levantado, despues de `docker compose up -d --remove-orphans` borra su base y su volumen (**borra los chatflows y la memoria de conversaciones de Flowise, no se puede deshacer**):
+
+```bash
+docker compose exec -T postgres psql -U postgres -c 'DROP DATABASE IF EXISTS flowise' -c 'DROP ROLE IF EXISTS flowise'
+docker volume rm "$(basename "$PWD" | tr '[:upper:]' '[:lower:]')_flowise_data"
+```
+
+Las variables `FLOWISE_*` del `.env` ya no se usan y se pueden borrar.

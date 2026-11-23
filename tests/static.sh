@@ -25,4 +25,5 @@ check "evolution history/telemetry env forced to false" bash -c '
   docker compose --env-file "$1" config --format json | jq -e "
    .services[\"evolution-api\"].environment
    | .DATABASE_SAVE_DATA_HISTORIC==\"false\" and .DATABASE_SAVE_MESSAGE_UPDATE==\"false\" and .TELEMETRY_ENABLED==\"false\""' _ "$tmp/env"
+check "no FLOWISE_ vars left" bash -c '! grep -q FLOWISE_ .env.example docker-compose.yml'
 exit $fail

@@ -13,7 +13,7 @@ poll() { local d=$1 t=$2; shift 2; local e=$((SECONDS+t)); until "$@" >/dev/null
 
 docker compose up -d >/dev/null 2>&1 || { echo "FAIL compose up"; exit 1; }
 
-for s in nginx evolution-api flowise postgres redis; do
+for s in nginx evolution-api postgres redis; do
   poll "$s running" 60 bash -c "[ \"\$(docker compose ps --format '{{.State}}' $s)\" = running ]"
 done
 for s in postgres redis; do
@@ -23,16 +23,15 @@ done
 poll "evolution 401 without apikey" 180 bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evolution.localhost' $B/instance/fetchInstances)\" = 401 ]"
 c=$(code -H 'Host: evolution.localhost' -H "apikey: $EVOLUTION_API_KEY" $B/instance/fetchInstances)
 [ "$c" = 200 ] && ok "evolution 200 with apikey" || bad "evolution 200 with apikey" "$c"
-poll "flowise 200" 180 bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: flowise.localhost' $B/)\" = 200 ]"
 
-h=$(curl -si --max-time 5 -H 'Host: flowise.localhost' $B/)
+h=$(curl -si --max-time 5 -H 'Host: evolution.localhost' $B/)
 for k in X-Content-Type-Options:\ nosniff X-Frame-Options Referrer-Policy; do
   echo "$h" | grep -qi "^$k" && ok "header $k" || bad "header $k" missing
 done
 echo "$h" | grep -i '^server:' | grep -qE '[0-9]' && bad "Server header has no version" "$(echo "$h" | grep -i '^server:')" || ok "Server header has no version"
 
-c=$(code -X POST -H 'Host: flowise.localhost' $B/api/v1/prediction/x)
-[ "$c" = 403 ] && ok "flowise public prediction blocked" || bad "flowise public prediction blocked" "$c"
+c=$(code -H 'Host: flowise.localhost' $B/)
+{ [ "$c" = 444 ] || [ "$c" = 000 ]; } && ok "flowise host gone ($c)" || bad "flowise host gone" "$c"
 
 c=$(code -H 'Host: foo.localhost' $B/)
 { [ "$c" = 444 ] || [ "$c" = 000 ]; } && ok "unknown host dropped ($c)" || bad "unknown host dropped" "$c"
