@@ -4,7 +4,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { APICallError, generateText, type LanguageModel } from "ai";
 import type { KeyStatus, Provider } from "@/db/schema";
-import { assertSafeBaseUrl } from "./base-url";
+import { assertSafeBaseUrl, safeFetch } from "./base-url";
 
 export type ModelSettings = { provider: Provider; model: string; apiKey: string; baseUrl: string | null };
 export type ModelFactory = (s: ModelSettings) => Promise<LanguageModel>;
@@ -44,7 +44,7 @@ export const createModel: ModelFactory = async (s) => {
       return createOpenAI({ apiKey: s.apiKey })(s.model);
     case "openai-compatible": {
       const url = await assertSafeBaseUrl(s.baseUrl ?? "");
-      return createOpenAICompatible({ name: "custom", baseURL: url.toString(), apiKey: s.apiKey })(s.model);
+      return createOpenAICompatible({ name: "custom", baseURL: url.toString(), apiKey: s.apiKey, fetch: safeFetch })(s.model);
     }
   }
 };
