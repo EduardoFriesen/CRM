@@ -40,7 +40,7 @@ export function CatalogManager({ slug, products }: { slug: string; products: Pro
         <form key={formKey} action={action} className="product-form" noValidate>
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <Field name="name" label="Nombre" errors={errors} defaultValue={values?.name} required />
-          <Field name="price" label="Precio" errors={errors} defaultValue={values?.price} hint="En pesos. Ej. 2500 o 2500,50" inputMode="decimal" required />
+          <Field name="price" label="Precio" errors={errors} defaultValue={values?.price} hint="En pesos. Ej. 2.500 o 2.500,50" inputMode="decimal" required />
           <Field name="stock" label="Stock" errors={errors} defaultValue={values?.stock} hint="Vacío = no controlar stock. El bot nunca dice la cantidad." inputMode="numeric" />
           <Field name="description" label="Descripción" errors={errors} defaultValue={values?.description} hint="Lo que el bot puede contar del producto" multiline />
           <label className="check">

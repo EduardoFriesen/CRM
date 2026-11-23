@@ -11,12 +11,26 @@ const optionalStock = z.preprocess(
 );
 const activeFlag = z.preprocess((v) => (v === undefined ? true : v === true || v === "true" || v === "on"), z.boolean());
 
+const AR_GROUPED = /^\d{1,3}(\.\d{3})+$/;
+const AR_GROUPED_DECIMAL = /^\d{1,3}(\.\d{3})+,\d+$/;
+
+// es-AR input: "." groups thousands and "," is the decimal mark ("2.500" = 2500,
+// "2.500,50" = 2500.5). A bare "12.5" or "2500.50" is still read as a decimal.
+// Mixed forms that don't fit ("2,500.50") become NaN and fail validation.
+function normalizePrice(raw: string): string {
+  const v = raw.trim();
+  if (v.includes(",")) {
+    if (v.includes(".") && !AR_GROUPED_DECIMAL.test(v)) return "NaN";
+    return v.replace(/\./g, "").replace(",", ".");
+  }
+  return AR_GROUPED.test(v) ? v.replace(/\./g, "") : v;
+}
+
 export const productInput = z.object({
   name: z.string().trim().min(1, "Poné un nombre").max(120, "Máximo 120 caracteres"),
   description: z.string().trim().max(1000, "Máximo 1000 caracteres").default(""),
-  // Accepts "2500", "2500.50" and the local "2500,50".
   price: z.preprocess(
-    (v) => (typeof v === "string" ? v.trim().replace(",", ".") : v),
+    (v) => (typeof v === "string" ? normalizePrice(v) : v),
     z.coerce
       .number({ error: "Tiene que ser un número" })
       .min(0, "Tiene que ser mayor o igual a 0")
