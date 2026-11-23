@@ -70,3 +70,9 @@ test("an empty board invites to connect WhatsApp", async ({ page }) => {
   await expect(page.getByText("Todavía no te escribió nadie")).toBeVisible();
   await expect(page.getByRole("link", { name: "Conectar WhatsApp" })).toHaveAttribute("href", `/t/${emptySlug}/whatsapp`);
 });
+
+test("the board says when no agent is configured and links to it", async ({ page }) => {
+  await page.goto(`/t/${slug}`);
+  const link = page.getByRole("link", { name: "Sin agente configurado" });
+  await expect(link).toHaveAttribute("href", `/t/${slug}/agente`);
+});

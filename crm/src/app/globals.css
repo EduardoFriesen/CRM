@@ -241,6 +241,33 @@ input[aria-invalid="true"] {
   font-weight: 650;
 }
 
+.bot-status {
+  font-weight: 600;
+  text-decoration: none;
+}
+.bot-status::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--space-1);
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+.bot-status.ok {
+  color: var(--primary);
+}
+.bot-status.off {
+  color: var(--muted);
+}
+.bot-status.warn {
+  color: var(--warning-ink);
+}
+.bot-status.bad {
+  color: var(--danger);
+}
+
 /* Tenant list + form ------------------------------------------------------- */
 
 .tenant-list {
@@ -632,6 +659,77 @@ button.danger:hover:not(:disabled) {
 .meta-note {
   color: var(--muted);
   font-size: var(--text-sm);
+}
+
+.test-chat {
+  position: sticky;
+  top: var(--space-4);
+}
+.test-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.test-chat-head button {
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 220px;
+  max-height: 460px;
+  margin: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
+  list-style: none;
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.chat-empty {
+  margin: auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+.bubble {
+  max-width: 85%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bubble.user {
+  align-self: flex-end;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.bubble.assistant {
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.bubble.typing {
+  color: var(--muted);
+  font-style: italic;
+}
+.stage-note {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.chat-input {
+  display: flex;
+  gap: var(--space-2);
+}
+.chat-input input {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Loading + WhatsApp ----------------------------------------------------- */

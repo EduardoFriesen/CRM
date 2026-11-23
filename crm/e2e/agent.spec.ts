@@ -12,6 +12,8 @@ test.afterAll(async () => {
   await sql.end();
 });
 
+test.describe.configure({ mode: "serial" });
+
 test("configure the agent; the key is masked and never rendered", async ({ page }) => {
   await page.goto(`/t/${slug}/agente`);
   await expect(page.getByLabel("Encender el bot")).not.toBeChecked();
@@ -29,4 +31,12 @@ test("configure the agent; the key is masked and never rendered", async ({ page 
   await expect(page.getByText("••••1234")).toBeVisible();
   expect(await page.content()).not.toContain("sk-test-abcd1234");
   await expect(page.getByLabel("Nombre del agente")).toHaveValue("Sofi");
+});
+
+test("the test chat answers with the configured agent", async ({ page }) => {
+  await page.goto(`/t/${slug}/agente`);
+  await expect(page.getByText("Probá cómo responde tu agente")).toBeVisible();
+  await page.getByLabel("Mensaje de prueba").fill("Hola");
+  await page.getByRole("button", { name: "Enviar" }).click();
+  await expect(page.getByText("Respuesta de prueba")).toBeVisible();
 });

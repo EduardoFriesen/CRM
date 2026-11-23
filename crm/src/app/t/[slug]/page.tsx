@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getAgentView, type AgentView } from "@/agent/config";
 import { listBoard, type BoardContact } from "@/contacts/contacts";
 import { messagePreview } from "@/contacts/preview";
 import { waLink } from "@/contacts/wa-link";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function BoardPage({ params }: { params: Promise<{ slug: string }> }) {
   const tenant = await getCurrentTenant((await params).slug);
-  const board = await listBoard(tenant.id);
+  const [board, agent] = await Promise.all([listBoard(tenant.id), getAgentView(tenant.id)]);
   const total = STAGES.reduce((n, s) => n + board[s].length, 0);
   const now = new Date();
 
@@ -23,7 +24,8 @@ export default async function BoardPage({ params }: { params: Promise<{ slug: st
       <div className="page-head">
         <h1>Clientes</h1>
         <p className="meta" aria-live="polite">
-          {total === 1 ? "1 conversación" : `${total} conversaciones`} · se actualiza solo
+          {total === 1 ? "1 conversación" : `${total} conversaciones`} · se actualiza solo ·{" "}
+          <BotStatus slug={tenant.slug} agent={agent} />
         </p>
       </div>
 
@@ -44,6 +46,21 @@ export default async function BoardPage({ params }: { params: Promise<{ slug: st
         </div>
       )}
     </main>
+  );
+}
+
+function BotStatus({ slug, agent }: { slug: string; agent: AgentView | null }) {
+  const [label, tone] = !agent
+    ? ["Sin agente configurado", "warn"]
+    : agent.keyStatus === "invalid"
+      ? ["Key inválida: revisá el agente", "bad"]
+      : agent.enabled
+        ? ["Bot encendido", "ok"]
+        : ["Bot apagado", "off"];
+  return (
+    <Link href={`/t/${slug}/agente`} className={`bot-status ${tone}`}>
+      {label}
+    </Link>
   );
 }
 

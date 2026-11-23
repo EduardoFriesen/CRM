@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { saveAgentConfig, type AgentView } from "@/agent/config";
+import { tryAgent, type TryTurn } from "@/bot/try-agent";
+import type { Stage } from "@/db/schema";
 import type { Result } from "@/lib/result";
 import { getCurrentTenant } from "@/tenants/tenants";
 
@@ -34,4 +36,12 @@ export async function saveAgentAction(slug: string, _prev: AgentFormState, form:
   const result = await saveAgentConfig(tenant.id, { ...values, apiKey: text("apiKey") });
   if (result.success) revalidatePath(`/t/${tenant.slug}`, "layout");
   return { result, values };
+}
+
+export async function tryAgentAction(
+  slug: string,
+  history: TryTurn[],
+): Promise<Result<{ reply: string; stage: Stage | null }>> {
+  const tenant = await getCurrentTenant(slug);
+  return tryAgent(tenant.id, history);
 }

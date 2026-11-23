@@ -1,6 +1,6 @@
 # CRM - Bot de WhatsApp con IA
 
-Stack Docker Compose: app CRM (Next.js) + Evolution API v2.3.7 (WhatsApp) + Postgres 17 + Redis 8 + nginx como proxy. El bot con IA se reconstruye dentro de la app del CRM (entrega 2); por ahora **no responde mensajes**.
+Stack Docker Compose: app CRM (Next.js) + worker del bot (BullMQ) + Evolution API v2.3.7 (WhatsApp) + Postgres 17 + Redis 8 + nginx como proxy. Cada negocio configura su propio agente de IA con su API key.
 
 ## Requisitos
 
@@ -33,7 +33,17 @@ Flujo:
 2. Entra al negocio > **WhatsApp** y escanea el QR desde el telefono del negocio (Dispositivos vinculados). La app crea la instancia en Evolution con un webhook propio y un secreto por instancia.
 3. Cada mensaje que recibe o envia ese numero aparece en **Clientes**, en la columna Consulta. Tocar la tarjeta abre el chat en `wa.me` (con la cuenta de WhatsApp que tengas abierta en ese dispositivo); la etapa se cambia con el selector de la tarjeta.
 
-En esta entrega el bot **no responde**: la IA vuelve en la entrega 2, dentro del CRM.
+4. En **Catálogo** cargá los productos y en **Agente** el modelo, la API key, el tono y la información del negocio. Probalo en el chat de prueba y encendé el bot.
+
+## Bot
+
+- **Cómo contesta:** el webhook guarda cada mensaje y, si el bot del negocio está encendido, encola una respuesta en Redis (base 2). Los mensajes que llegan dentro de 8 segundos se juntan. El servicio `crm-worker` toma la tarea, le pasa al modelo los últimos 20 mensajes, el catálogo (herramienta de búsqueda) y la información del negocio, y responde por WhatsApp. También mueve la tarjeta entre Consulta, Venta y Postventa.
+- **Veracidad:** el bot solo afirma lo que está en el catálogo activo o en la información del negocio. Si le falta un dato responde "no tengo ese dato, te lo confirma alguien del equipo". Nunca dice cantidades de stock ni afirma ser una persona. Si el negocio lo elige, se presenta como asistente virtual al empezar cada charla.
+- **No contesta** mensajes que llegaron con el bot apagado, ni si el último mensaje de la charla es del negocio (por ejemplo, si respondiste vos desde el teléfono). Tope de **20 respuestas por cliente por hora** contra bucles y costos.
+- **API keys:** se guardan cifradas (AES-256-GCM) con `CRM_ENCRYPTION_KEY` (64 hex, `openssl rand -hex 32`), que solo tienen `crm` y `crm-worker`. **Si cambiás esa clave, todas las keys guardadas dejan de servir** y cada negocio tiene que volver a cargarla. Si el proveedor rechaza la key (401/403), el bot se apaga solo y la pantalla Agente lo muestra.
+- **Proveedores:** Anthropic, Google, OpenAI y compatibles con OpenAI (OpenRouter, Groq…). La URL de un proveedor compatible tiene que ser `https://` y apuntar a una IP pública: no se aceptan direcciones de la red local ni de Docker (por eso Ollama en la LAN no funciona por ahora).
+- **Datos personales (Ley 25.326):** el texto de las conversaciones se envía al proveedor de IA que elige cada negocio; tiene que figurar en su política de privacidad.
+- **Diagnóstico:** `docker compose logs crm-worker` muestra por respuesta solo ids, resultado (`sent`, `skipped:...`) y duración; nunca textos ni teléfonos. El último error del bot también aparece en la pantalla Agente.
 
 Base de datos: la app usa la base `crm` con dos roles. `crm` es el dueno y solo lo usa el servicio `crm-migrate` (aplica migraciones y termina); `crm_app` es el que usa la app y esta sujeto a Row Level Security por negocio. En un volumen de Postgres que ya existia, crea la base y los roles una vez:
 
@@ -95,6 +105,10 @@ No se ejecuto automaticamente; completar y registrar el resultado en la descripc
 - [ ] Desde el negocio > WhatsApp, escanear el QR con el numero dedicado.
 - [ ] Escribirle desde otro telefono: aparece la tarjeta en Consulta con el ultimo mensaje.
 - [ ] Tocar la tarjeta abre `wa.me` con ese numero; moverla a Venta con el selector.
+- [ ] Cargar un producto en Catálogo y configurar el Agente con una API key real; encender el bot.
+- [ ] Escribirle desde otro telefono "¿tienen <producto>?": responde con el precio y "disponible" sin decir cantidades.
+- [ ] Preguntar algo que no está en el catálogo ni en la información: responde "no tengo ese dato, te lo confirma alguien del equipo".
+- [ ] Decirle que lo querés comprar: la tarjeta pasa a Venta.
 - [ ] Escribir en un grupo donde este el numero: no debe responder.
 - [ ] Reiniciar el stack (`docker compose restart`) y confirmar que la instancia sigue conectada.
 

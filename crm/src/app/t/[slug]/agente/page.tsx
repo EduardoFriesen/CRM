@@ -2,6 +2,7 @@ import { getAgentView } from "@/agent/config";
 import { MODEL_SUGGESTIONS } from "@/agent/model";
 import { getCurrentTenant } from "@/tenants/tenants";
 import { AgentForm } from "./agent-form";
+import { TestChat } from "./test-chat";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function AgentPage({ params }: { params: Promise<{ slug: st
       </div>
       <div className="agent-layout">
         <AgentForm slug={tenant.slug} view={view} suggestions={MODEL_SUGGESTIONS} />
+        <TestChat slug={tenant.slug} configured={view !== null} />
       </div>
     </main>
   );
