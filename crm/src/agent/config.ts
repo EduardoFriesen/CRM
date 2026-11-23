@@ -4,6 +4,7 @@ import { decrypt, encrypt } from "@/crypto/secret-box";
 import { withTenant } from "@/db/client";
 import { agentConfigs, tenants, PROVIDERS, type AgentConfigRow, type KeyStatus, type Provider } from "@/db/schema";
 import { fail, ok, type Result } from "@/lib/result";
+import { recordUsage } from "@/usage/usage";
 import { assertSafeBaseUrl, UnsafeBaseUrlError } from "./base-url";
 import { verifyKeyDetailed, type KeyCheck, type KeyCheckResult, type ModelSettings } from "./model";
 
@@ -129,6 +130,8 @@ export async function saveAgentConfig(
   const result: KeyCheckResult = unchanged
     ? { status: existing.keyStatus, code: null }
     : await verify(settings).then((r) => (typeof r === "string" ? { status: r, code: null } : r));
+  // The verification call spends provider quota too.
+  if (!unchanged) await recordUsage(tenantId, { requests: 1 }).catch(() => {});
   const check = result.status;
   if (check === "invalid" && !unchanged) return fail("KEY_INVALID", "El proveedor rechazó la API key");
   const keyStatus: KeyStatus = check === "quota" ? "valid" : check;

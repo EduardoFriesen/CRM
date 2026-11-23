@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, integer, numeric, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, integer, numeric, pgEnum, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 export const STAGES = ["consulta", "venta", "postventa"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -109,6 +109,9 @@ export const agentConfigs = pgTable(
   lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
   pauseHours: integer("pause_hours").notNull().default(12),
   adminHintAt: timestamp("admin_hint_at", { withTimezone: true }),
+  // Copied by the tenant from their AI plan; null = no limit known.
+  dailyRequestLimit: integer("daily_request_limit"),
+  dailyTokenLimit: integer("daily_token_limit"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [check("agent_configs_pause_hours_check", sql`${t.pauseHours} between 1 and 168`)],
@@ -195,3 +198,17 @@ export const orderItems = pgTable(
   (t) => [check("order_items_quantity_check", sql`${t.quantity} > 0`)],
 );
 export type OrderItem = typeof orderItems.$inferSelect;
+
+// Daily AI consumption per tenant (Buenos Aires calendar day), for the usage bar.
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    tenantId: tenantId(),
+    day: date().notNull(),
+    requests: integer().notNull().default(0),
+    inputTokens: bigint("input_tokens", { mode: "number" }).notNull().default(0),
+    outputTokens: bigint("output_tokens", { mode: "number" }).notNull().default(0),
+    replies: integer().notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.day] })],
+);

@@ -38,7 +38,7 @@ export async function tryAgent(
   const system = buildSystemPrompt({ ...rt, tenantName: tenant?.name ?? "", introduce: rt.discloseAi && parsed.data.length === 1, now: new Date(), facts });
   try {
     const model = deps.model ?? (await createModel(rt));
-    const reply = await generateAgentText(model, {
+    const reply = await generateAgentText(tenantId, model, {
       system,
       // Providers expect the conversation to open with the user.
       messages: parsed.data

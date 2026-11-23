@@ -70,6 +70,31 @@ describe("runConversation", () => {
     expect(row).toEqual({ author: "bot", direction: "out" });
   });
 
+  it("meters every model step, its tokens and the reply", async () => {
+    const { t, c } = await setup();
+    await ownerSql`delete from ai_usage where tenant_id = ${t.id}`; // setup's key verification also counts
+    await say(t.id, c.id, "customer", "¿Tienen pan?");
+    const model = new MockLanguageModelV4({ doGenerate: [toolCall("search_catalog", { query: "pan" }), text("Sí")] });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    const [u] = await ownerSql<{ requests: number; input_tokens: string; output_tokens: string; replies: number }[]>`
+      select requests, input_tokens, output_tokens, replies from ai_usage where tenant_id = ${t.id}`;
+    expect(u).toEqual({ requests: 2, input_tokens: "2", output_tokens: "2", replies: 1 });
+  });
+
+  it("counts a refused call as a request without tokens", async () => {
+    const { t, c } = await setup();
+    await ownerSql`delete from ai_usage where tenant_id = ${t.id}`; // setup's key verification also counts
+    await say(t.id, c.id, "customer", "Hola");
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new APICallError({ message: "quota", url: "https://x", requestBodyValues: {}, statusCode: 429, responseBody: "PerDay" });
+      },
+    });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    const [u] = await ownerSql<{ requests: number; input_tokens: string }[]>`select requests, input_tokens from ai_usage where tenant_id = ${t.id}`;
+    expect(u).toEqual({ requests: 1, input_tokens: "0" });
+  });
+
   it("cannot move a customer to venta on its own (venta comes from the handoff)", async () => {
     const { t, c } = await setup();
     await say(t.id, c.id, "customer", "Quiero 2 docenas");

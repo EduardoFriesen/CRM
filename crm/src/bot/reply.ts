@@ -6,6 +6,7 @@ import { withTenant } from "@/db/client";
 import { contacts, escalations, messages, tenants, whatsappInstances } from "@/db/schema";
 import { EvolutionError, sendText } from "@/whatsapp/evolution";
 import { recentFacts } from "@/facts/facts";
+import { recordUsage, type UsageDelta } from "@/usage/usage";
 import { whyNotLearned } from "@/facts/facts";
 import { notifyAdmin, relayConfirmText, relayFailedText } from "./admin-messages";
 import { buildSystemPrompt } from "./prompt";
@@ -38,14 +39,34 @@ export function truncateForWhatsApp(text: string, maxLength = WHATSAPP_MAX): str
   return end > 0 ? cut.slice(0, end).trimEnd() : cut;
 }
 
+// Usage metering must never break a reply: failures are logged and swallowed here.
+export function meter(tenantId: string, delta: UsageDelta): Promise<void> {
+  return recordUsage(tenantId, delta).catch((e: unknown) => {
+    console.error(`usage record failed: ${errorCode(e)}`);
+  });
+}
+
+// The single place the tenant's model is called: every step and its tokens are metered,
+// and a failed call still counts as one request (providers count it too).
 export async function generateAgentText(
+  tenantId: string,
   model: LanguageModel,
   args: { system: string; messages: ModelMessage[]; tools: ToolSet },
 ): Promise<string> {
-  // No SDK-level retries: BullMQ retries transient failures, and retrying a 429 here would
-  // only spend more of the provider quota.
-  const result = await generateText({ model, ...args, stopWhen: isStepCount(4), maxRetries: 0 });
-  return result.text;
+  try {
+    // No SDK-level retries: BullMQ retries transient failures, and retrying a 429 here would
+    // only spend more of the provider quota.
+    const result = await generateText({ model, ...args, stopWhen: isStepCount(4), maxRetries: 0 });
+    await meter(tenantId, {
+      requests: result.steps.length,
+      inputTokens: result.totalUsage.inputTokens ?? 0,
+      outputTokens: result.totalUsage.outputTokens ?? 0,
+    });
+    return result.text;
+  } catch (e) {
+    await meter(tenantId, { requests: 1 });
+    throw e;
+  }
 }
 
 export function errorCode(e: unknown): string {
@@ -105,16 +126,17 @@ async function deliver(
   await withTenant(tenantId, (tx) =>
     tx.update(contacts).set({ lastMessageAt: sql`greatest(${contacts.lastMessageAt}, now())` }).where(eq(contacts.id, contactId)),
   );
+  await meter(tenantId, { replies: 1 });
 }
 
 async function generateOrRecord(
   tenantId: string,
   rt: { pauseHours: number } & Parameters<typeof createModel>[0],
   model: LanguageModel | undefined,
-  args: Parameters<typeof generateAgentText>[1],
+  args: Parameters<typeof generateAgentText>[2],
 ): Promise<string | "skipped:key-invalid" | "skipped:model-error" | "skipped:quota"> {
   try {
-    return await generateAgentText(model ?? (await createModel(rt)), args);
+    return await generateAgentText(tenantId, model ?? (await createModel(rt)), args);
   } catch (e) {
     if (isQuotaExhausted(e)) {
       await recordAgentError(tenantId, "QUOTA_EXCEEDED");
