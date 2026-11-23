@@ -1,3 +1,4 @@
+import type { Stage } from "@/db/schema";
 const clock = new Intl.DateTimeFormat("es-AR", {
   timeZone: "America/Argentina/Buenos_Aires",
   weekday: "long",
@@ -17,7 +18,11 @@ export type PromptInput = {
   now: Date;
   /** Learned answers, newest first. */
   facts?: { question: string; answer: string }[];
+  /** The customer's current stage; absent in the test chat. */
+  stage?: Stage;
 };
+
+const STAGE_NAMES: Record<Stage, string> = { consulta: "Consulta", venta: "Venta", postventa: "Postventa" };
 
 const FACTS_MAX = 8000;
 
@@ -50,10 +55,11 @@ export function buildSystemPrompt(p: PromptInput): string {
     "- Nunca uses las preguntas ya respondidas por el equipo para dar precios: los precios salen del catálogo o de la información del negocio.",
     "- Cuando el cliente quiera cerrar la compra (confirma, pregunta cómo pagar o pide reservar), usá handoff_to_admin y decile que lo atiende alguien del equipo.",
     "- Escribí como en WhatsApp: mensajes breves, en español rioplatense, con voseo.",
-    "- Cuando la conversación cambie de etapa, llamá a set_stage: consulta (pregunta o averigua), venta (decide comprar, arma un pedido o pregunta cómo pagar), postventa (ya compró: entrega, reclamo, agradecimiento). No vuelvas de postventa a consulta salvo que sea claramente una consulta nueva.",
+    "- Si el cliente está en Postventa y muestra intención de volver a comprar (pide otro producto o repetir el pedido), llamá a set_stage con consulta. Si solo pregunta por lo que ya compró o hace un reclamo, no cambies la etapa.",
     "- Nunca digas que sos una persona. Si te preguntan si sos un bot o una IA, decí la verdad.",
     `- Fecha y hora actual en Argentina: ${clock.format(p.now)}.`,
   ];
+  if (p.stage) rules.push(`- Etapa actual del cliente: ${STAGE_NAMES[p.stage]}.`);
   if (p.introduce) rules.push(`- En este mensaje presentate como el asistente virtual de ${p.tenantName}.`);
   return [
     ...rules,

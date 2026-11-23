@@ -23,7 +23,7 @@ describe("tryAgent", () => {
     const model = new MockLanguageModelV4({
       doGenerate: [
         {
-          content: [{ type: "tool-call", toolCallId: "c1", toolName: "set_stage", input: JSON.stringify({ stage: "venta" }) }],
+          content: [{ type: "tool-call", toolCallId: "c1", toolName: "set_stage", input: JSON.stringify({ stage: "consulta" }) }],
           finishReason: { unified: "tool-calls", raw: undefined },
           usage,
           warnings: [],
@@ -32,7 +32,7 @@ describe("tryAgent", () => {
       ],
     });
     const r = await tryAgent(t.id, [{ role: "user", text: "Quiero comprar" }], { model });
-    expect(r).toEqual({ success: true, data: { reply: "¡Genial!", stage: "venta", adminNote: null } });
+    expect(r).toEqual({ success: true, data: { reply: "¡Genial!", stage: "consulta", adminNote: null } });
     const stages = await ownerSql<{ stage: string }[]>`select stage from contacts where tenant_id = ${t.id}`;
     expect(stages).toEqual([{ stage: "consulta" }]);
   });

@@ -154,7 +154,8 @@ export async function deliverOrder(tenantId: string, id: string): Promise<Result
       .where(and(eq(orders.id, id), eq(orders.status, "pending")))
       .returning({ id: orders.id, contactId: orders.contactId });
     if (!o) return fail<OrderView>("VALIDATION", NOT_PENDING);
-    await tx.update(contacts).set({ stage: "postventa" }).where(eq(contacts.id, o.contactId));
+    // Delivered: the customer is in postventa and the bot takes the chat back from the handoff.
+    await tx.update(contacts).set({ stage: "postventa", botPausedUntil: null }).where(eq(contacts.id, o.contactId));
     const [view] = await loadViews(tx, eq(orders.id, o.id), "upcoming");
     return ok(view);
   });

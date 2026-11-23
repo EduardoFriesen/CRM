@@ -112,6 +112,18 @@ describe("deliver and cancel", () => {
     expect(row.stage).toBe("postventa");
   });
 
+  it("delivering reactivates the bot for that chat", async () => {
+    const t = await makeTenant();
+    const pan = await product(t.id, "Pan de campo", 100, 5);
+    const c = await buyer(t.id);
+    await ownerSql`update contacts set bot_paused_until = now() + interval '10 hours' where id = ${c}`;
+    const r = await createOrder(t.id, input(c, [{ productId: pan, quantity: 1 }]));
+    if (!r.success) throw new Error("setup");
+    await deliverOrder(t.id, r.data.id);
+    const [row] = await ownerSql<{ bot_paused_until: Date | null }[]>`select bot_paused_until from contacts where id = ${c}`;
+    expect(row.bot_paused_until).toBeNull();
+  });
+
   it("cancelling returns the stock exactly once", async () => {
     const t = await makeTenant();
     const pan = await product(t.id, "Pan de campo", 100, 5);

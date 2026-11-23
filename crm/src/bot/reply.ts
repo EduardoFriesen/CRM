@@ -167,7 +167,7 @@ export async function runConversation(
 
   const introduce = rt.discloseAi && (!conv.lastBotAt || now.getTime() - conv.lastBotAt.getTime() > INTRO_GAP_MS);
   const facts = await recentFacts(tenantId);
-  const system = buildSystemPrompt({ ...rt, tenantName: conv.tenantName, introduce, now, facts });
+  const system = buildSystemPrompt({ ...rt, tenantName: conv.tenantName, introduce, now, facts, stage: conv.contact.stage });
   // Providers expect the conversation to open with the user: drop leading bot/admin turns.
   const firstCustomer = conv.recent.findIndex((m) => m.author === "customer");
   const history: ModelMessage[] = conv.recent.slice(firstCustomer).map((m) => ({
@@ -241,7 +241,14 @@ async function relayToCustomer(
   if (conv.contact.botPausedUntil && conv.contact.botPausedUntil > now) return "skipped:paused";
   if (conv.botLastHour >= MAX_BOT_REPLIES_PER_HOUR) return "skipped:rate-limit";
 
-  const system = buildSystemPrompt({ ...rt, tenantName: conv.tenantName, introduce: false, now, facts: await recentFacts(tenantId) });
+  const system = buildSystemPrompt({
+    ...rt,
+    tenantName: conv.tenantName,
+    introduce: false,
+    now,
+    facts: await recentFacts(tenantId),
+    stage: conv.contact.stage,
+  });
   const firstCustomer = conv.recent.findIndex((m) => m.author === "customer");
   const history: ModelMessage[] = (firstCustomer >= 0 ? conv.recent.slice(firstCustomer) : []).map((m) => ({
     role: m.author === "customer" ? "user" : "assistant",

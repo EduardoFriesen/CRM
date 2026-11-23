@@ -37,6 +37,18 @@ describe("buildSystemPrompt", () => {
   });
 });
 
+describe("stage rules (entrega 4)", () => {
+  it("tells the model the current stage and when to reopen a postventa customer", () => {
+    const p = buildSystemPrompt({ ...base, stage: "postventa" });
+    expect(p).toContain("Etapa actual del cliente: Postventa");
+    expect(p).toContain(
+      "Si el cliente está en Postventa y muestra intención de volver a comprar (pide otro producto o repetir el pedido), llamá a set_stage con consulta. Si solo pregunta por lo que ya compró o hace un reclamo, no cambies la etapa.",
+    );
+    expect(p).not.toContain("venta (decide comprar");
+  });
+  it("omits the stage line when there is no customer", () => expect(buildSystemPrompt(base)).not.toContain("Etapa actual"));
+});
+
 describe("learned facts and 2b rules", () => {
   it("puts learned facts inside the business block", () => {
     const p = buildSystemPrompt({ ...base, facts: [{ question: "¿Envían a Pilar?", answer: "Sí, los martes" }] });

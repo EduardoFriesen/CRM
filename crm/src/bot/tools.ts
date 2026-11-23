@@ -5,7 +5,7 @@ import { recordAgentError } from "@/agent/config";
 import { searchCatalog } from "@/catalog/catalog";
 import { setContactStage } from "@/contacts/contacts";
 import { withTenant } from "@/db/client";
-import { contacts, escalations, STAGES, type Stage } from "@/db/schema";
+import { contacts, escalations, type Stage } from "@/db/schema";
 import { escalationText, handoffText } from "./admin-messages";
 
 const MAX_PENDING_PER_CONTACT = 3;
@@ -37,8 +37,10 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
       execute: async ({ query }) => ({ products: await searchCatalog(tenantId, query) }),
     }),
     set_stage: tool({
-      description: "Mueve al cliente a la etapa de la conversación: consulta, venta o postventa.",
-      inputSchema: z.object({ stage: z.enum(STAGES) }),
+      // Venta comes from handoff_to_admin and Postventa from a delivered order: the only
+      // move the bot makes on its own is reopening a customer as consulta.
+      description: "Vuelve a poner al cliente en Consulta cuando, estando en Postventa, quiere volver a comprar.",
+      inputSchema: z.object({ stage: z.literal("consulta") }),
       execute: async ({ stage }) => {
         opts.onStage?.(stage);
         if (opts.dryRun) return { ok: true };

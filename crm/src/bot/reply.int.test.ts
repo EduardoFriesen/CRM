@@ -59,17 +59,37 @@ const say = (tenantId: string, contactId: string, author: "customer" | "bot" | "
 const sendOk = () => vi.fn(async () => ({ id: `BOT-${Math.random()}` }));
 
 describe("runConversation", () => {
-  it("answers, stores the reply as the bot and applies the stage the model picked", async () => {
+  it("answers and stores the reply as the bot", async () => {
     const { t, c } = await setup();
     await say(t.id, c.id, "customer", "Quiero 2 docenas de medialunas");
-    const model = new MockLanguageModelV4({ doGenerate: [stageCall("venta"), text("¡Dale! Te las preparo.")] });
+    const model = new MockLanguageModelV4({ doGenerate: text("¡Dale! Te las preparo.") });
     const send = vi.fn(async () => ({ id: "BOT1" }));
     expect(await runConversation(t.id, c.id, { model, send })).toBe("sent");
     expect(send).toHaveBeenCalledWith(t.slug, c.jid, "¡Dale! Te las preparo.");
     const [row] = await ownerSql<{ author: string; direction: string }[]>`select author, direction from messages where wa_message_id = 'BOT1'`;
     expect(row).toEqual({ author: "bot", direction: "out" });
+  });
+
+  it("cannot move a customer to venta on its own (venta comes from the handoff)", async () => {
+    const { t, c } = await setup();
+    await say(t.id, c.id, "customer", "Quiero 2 docenas");
+    const model = new MockLanguageModelV4({ doGenerate: [stageCall("venta"), text("¡Dale!")] });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
     const [contact] = await ownerSql<{ stage: string }[]>`select stage from contacts where id = ${c.id}`;
-    expect(contact.stage).toBe("venta");
+    expect(contact.stage).toBe("consulta");
+  });
+
+  it("reopens a postventa customer who wants to buy again, and tells the model the stage", async () => {
+    const { t, c } = await setup();
+    await ownerSql`insert into orders (tenant_id, contact_id, status, delivery_date, address, total)
+      values (${t.id}, ${c.id}, 'delivered', current_date, 'Calle 1', 100)`;
+    await ownerSql`update contacts set stage = 'postventa' where id = ${c.id}`;
+    await say(t.id, c.id, "customer", "¿Me mandás lo mismo que la otra vez?");
+    const model = new MockLanguageModelV4({ doGenerate: [stageCall("consulta"), text("¡Claro!")] });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain("Etapa actual del cliente: Postventa");
+    const [contact] = await ownerSql<{ stage: string }[]>`select stage from contacts where id = ${c.id}`;
+    expect(contact.stage).toBe("consulta");
   });
 
   it("claims its own message when the webhook echo stored it first as admin", async () => {
