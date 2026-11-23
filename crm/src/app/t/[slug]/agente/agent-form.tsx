@@ -33,6 +33,8 @@ const fromView = (v: AgentView | null, adminPhone: string): AgentFormValues => (
   discloseAi: v?.discloseAi ?? true,
   pauseHours: String(v?.pauseHours ?? 12),
   adminPhone: v?.adminPhone ?? adminPhone,
+  dailyRequestLimit: v?.dailyRequestLimit ? String(v.dailyRequestLimit) : "",
+  dailyTokenLimit: v?.dailyTokenLimit ? String(v.dailyTokenLimit) : "",
 });
 
 export function AgentForm({
@@ -139,6 +141,20 @@ export function AgentForm({
           errors={errors}
           defaultValue={values.adminPhone}
           hint="Las consultas y avisos de traspaso llegan a este número. Para responder una consulta, citá el mensaje."
+        />
+        <Field
+          name="dailyRequestLimit"
+          label="Límite diario de pedidos"
+          errors={errors}
+          defaultValue={values.dailyRequestLimit}
+          hint="Copialo de tu plan; vacío = sin límite. La barra de consumo avisa al 80% y al 100%."
+        />
+        <Field
+          name="dailyTokenLimit"
+          label="Límite diario de tokens"
+          errors={errors}
+          defaultValue={values.dailyTokenLimit}
+          hint="Copialo de tu plan; vacío = sin límite."
         />
         <Field
           name="pauseHours"

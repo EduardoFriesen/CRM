@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { getCurrentTenant } from "@/tenants/tenants";
 import { TenantNav } from "./tenant-nav";
+import { UsageBar } from "./usage-bar";
 
 export default async function TenantLayout({
   children,
@@ -20,6 +21,7 @@ export default async function TenantLayout({
         <p className="tenant-name">{tenant.name}</p>
         <TenantNav slug={tenant.slug} />
       </header>
+      <UsageBar tenantId={tenant.id} slug={tenant.slug} />
       {children}
     </>
   );

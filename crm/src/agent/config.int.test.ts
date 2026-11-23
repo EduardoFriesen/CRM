@@ -116,4 +116,14 @@ describe("agent config", () => {
       data: { keyStatus: "unverified", lastErrorCode: "VERIFY_HTTP_503" },
     });
   });
+
+  it("stores optional daily limits and clears them with an empty field", async () => {
+    const t = await makeTenant();
+    expect(await saveAgentConfig(t.id, { ...base, dailyRequestLimit: "1000", dailyTokenLimit: "200000" }, valid)).toMatchObject({
+      data: { dailyRequestLimit: 1000, dailyTokenLimit: 200000 },
+    });
+    expect(await saveAgentConfig(t.id, { ...base, apiKey: "", dailyRequestLimit: "", dailyTokenLimit: "" }, valid)).toMatchObject({
+      data: { dailyRequestLimit: null, dailyTokenLimit: null },
+    });
+  });
 });

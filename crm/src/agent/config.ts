@@ -23,6 +23,8 @@ export type AgentView = {
   lastErrorAt: Date | null;
   pauseHours: number;
   adminPhone: string;
+  dailyRequestLimit: number | null;
+  dailyTokenLimit: number | null;
 };
 
 export type AgentRuntime = ModelSettings & {
@@ -52,6 +54,14 @@ export const agentInput = z.object({
     (v) => (v === undefined || v === "" ? 12 : v),
     z.coerce.number().int("Tiene que ser un número entero").min(1, "Entre 1 y 168 horas").max(168, "Entre 1 y 168 horas"),
   ),
+  dailyRequestLimit: z.preprocess(
+    (v) => (v === undefined || v === "" || v === null ? null : v),
+    z.union([z.null(), z.coerce.number().int("Número entero").min(1, "Mínimo 1").max(1_000_000_000)]),
+  ),
+  dailyTokenLimit: z.preprocess(
+    (v) => (v === undefined || v === "" || v === null ? null : v),
+    z.union([z.null(), z.coerce.number().int("Número entero").min(1, "Mínimo 1").max(1_000_000_000)]),
+  ),
   adminPhone: z
     .string()
     .trim()
@@ -74,6 +84,8 @@ const toView = (r: AgentConfigRow, adminPhone: string): AgentView => ({
   lastErrorAt: r.lastErrorAt,
   pauseHours: r.pauseHours,
   adminPhone,
+  dailyRequestLimit: r.dailyRequestLimit,
+  dailyTokenLimit: r.dailyTokenLimit,
 });
 
 const loadAdminPhone = async (tenantId: string) =>

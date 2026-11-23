@@ -19,6 +19,8 @@ export type AgentFormValues = {
   discloseAi: boolean;
   pauseHours: string;
   adminPhone: string;
+  dailyRequestLimit: string;
+  dailyTokenLimit: string;
 };
 export type AgentFormState = { result: Result<AgentView>; values: AgentFormValues } | null;
 
@@ -36,6 +38,8 @@ export async function saveAgentAction(slug: string, _prev: AgentFormState, form:
     discloseAi: form.get("discloseAi") === "on",
     pauseHours: text("pauseHours"),
     adminPhone: text("adminPhone"),
+    dailyRequestLimit: text("dailyRequestLimit"),
+    dailyTokenLimit: text("dailyTokenLimit"),
   };
   const result = await saveAgentConfig(tenant.id, { ...values, apiKey: text("apiKey") });
   if (result.success) revalidatePath(`/t/${tenant.slug}`, "layout");
