@@ -18,5 +18,9 @@ deny() { # extra pattern must appear in the error so a deny can't pass vacuously
 
 [ -n "$host" ] || { echo "FAIL no container IP"; exit 1; }
 ok   evolution "$EVOLUTION_DB_PASSWORD" evolution
+ok   crm       "$CRM_DB_PASSWORD"       crm
+ok   crm_app   "$CRM_APP_DB_PASSWORD"   crm
+deny "permission denied" crm_app   "$CRM_APP_DB_PASSWORD"   evolution
+deny "permission denied" evolution "$EVOLUTION_DB_PASSWORD" crm
 deny "password authentication failed" evolution wrong-password evolution
 exit $fail

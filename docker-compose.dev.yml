@@ -1,0 +1,6 @@
+# Development only: exposes Postgres on loopback for the crm app's tests.
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:55432:5432"

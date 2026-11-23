@@ -5,6 +5,8 @@ services:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing POSTGRES_PASSWORD}
       EVOLUTION_DB_PASSWORD: ${EVOLUTION_DB_PASSWORD:?missing EVOLUTION_DB_PASSWORD}
+      CRM_DB_PASSWORD: ${CRM_DB_PASSWORD:?missing CRM_DB_PASSWORD}
+      CRM_APP_DB_PASSWORD: ${CRM_APP_DB_PASSWORD:?missing CRM_APP_DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
