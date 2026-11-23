@@ -83,6 +83,29 @@ services:
       EVOLUTION_URL: http://evolution-api:8080
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:?missing EVOLUTION_API_KEY}
       CRM_INTERNAL_URL: http://crm:3000
+      REDIS_URL: redis://redis:6379/2
+      CRM_ENCRYPTION_KEY: ${CRM_ENCRYPTION_KEY:?missing CRM_ENCRYPTION_KEY}
+    networks: [backend]
+
+  crm-worker:
+    build: { context: ./crm, target: worker }
+    restart: unless-stopped
+    depends_on:
+      crm-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://crm_app:${CRM_APP_DB_PASSWORD:?missing CRM_APP_DB_PASSWORD}@postgres:5432/crm
+      REDIS_URL: redis://redis:6379/2
+      EVOLUTION_URL: http://evolution-api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:?missing EVOLUTION_API_KEY}
+      CRM_ENCRYPTION_KEY: ${CRM_ENCRYPTION_KEY:?missing CRM_ENCRYPTION_KEY}
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks: [backend]
 
   nginx:

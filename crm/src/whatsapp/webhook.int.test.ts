@@ -1,6 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { saveAgentConfig } from "@/agent/config";
+import { enqueueReply } from "@/bot/queue";
 import { hashSecret } from "@/whatsapp/secret";
 import { handleEvolutionEvent } from "@/whatsapp/webhook";
+
+vi.mock("@/bot/queue", () => ({ enqueueReply: vi.fn(async () => {}) }));
+const enqueue = vi.mocked(enqueueReply);
 import { dropTenants, makeInstance, makeTenant, ownerSql } from "@/test/db";
 
 const SECRET = "s3cret";
@@ -118,5 +123,56 @@ describe("handleEvolutionEvent", () => {
 
   it("acknowledges other events without writing", async () => {
     expect(await handleEvolutionEvent(tenant.slug, SECRET, { event: "contacts.update", data: {} })).toEqual({ status: 200 });
+  });
+
+});
+
+describe("webhook → bot queue", () => {
+  let botTenant: { id: string; slug: string };
+  const agent = (enabled: boolean) =>
+    saveAgentConfig(
+      botTenant.id,
+      { agentName: "Sofi", provider: "anthropic", model: "m", apiKey: "sk-1234", enabled: enabled ? "on" : undefined },
+      async () => "valid",
+    );
+  const incoming = (jid: string, fromMe = false) => {
+    const body = upsert({ remoteJid: jid, fromMe });
+    body.instance = botTenant.slug;
+    return body;
+  };
+
+  beforeAll(async () => {
+    botTenant = await makeTenant();
+    await makeInstance(botTenant.id, botTenant.slug, hashSecret(SECRET));
+  });
+  beforeEach(() => enqueue.mockReset());
+
+  it("queues a reply for an incoming message when the bot is on", async () => {
+    await agent(true);
+    await handleEvolutionEvent(botTenant.slug, SECRET, incoming("5491100000101@s.whatsapp.net"));
+    const [c] = await ownerSql<{ id: string }[]>`select id from contacts where jid = '5491100000101@s.whatsapp.net'`;
+    expect(enqueue).toHaveBeenCalledExactlyOnceWith(botTenant.id, c.id);
+  });
+
+  it("does not queue while the bot is off", async () => {
+    await agent(false);
+    await handleEvolutionEvent(botTenant.slug, SECRET, incoming("5491100000102@s.whatsapp.net"));
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("never queues the business's own messages", async () => {
+    await agent(true);
+    await handleEvolutionEvent(botTenant.slug, SECRET, incoming("5491100000103@s.whatsapp.net", true));
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("keeps the message and answers 200 when the queue is down", async () => {
+    await agent(true);
+    enqueue.mockRejectedValueOnce(Object.assign(new Error("connect"), { code: "ECONNREFUSED" }));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await handleEvolutionEvent(botTenant.slug, SECRET, incoming("5491100000104@s.whatsapp.net"))).toEqual({ status: 200 });
+    expect(log.mock.calls.flat().join(" ")).toContain("ECONNREFUSED");
+    expect(await ownerSql`select 1 from contacts where tenant_id = ${botTenant.id} and jid = '5491100000104@s.whatsapp.net'`).toHaveLength(1);
+    log.mockRestore();
   });
 });

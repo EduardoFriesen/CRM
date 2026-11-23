@@ -35,4 +35,16 @@ check "owner db url only in crm-migrate" bash -c '
    [.services|to_entries[]|select(.value.environment.DATABASE_OWNER_URL)|.key]==[\"crm-migrate\"]"' _ "$tmp/env"
 check "nginx starts without waiting for app upstreams" bash -c '
   docker compose --env-file "$1" config --format json | jq -e "(.services.nginx.depends_on // {}) | has(\"crm\") or has(\"evolution-api\") | not"' _ "$tmp/env"
+check "crm-worker: no ports, owner url absent, encryption key and redis db 2" bash -c '
+  docker compose --env-file "$1" config --format json | jq -e "
+   .services[\"crm-worker\"] as \$w
+   | (\$w.ports // [] | length)==0
+   and (\$w.environment.DATABASE_OWNER_URL == null)
+   and (\$w.environment.CRM_ENCRYPTION_KEY | length > 0)
+   and (\$w.environment.REDIS_URL | endswith(\"/2\"))
+   and \$w.depends_on[\"crm-migrate\"].condition==\"service_completed_successfully\"
+   and \$w.depends_on.redis.condition==\"service_healthy\""' _ "$tmp/env"
+check "crm app has redis db 2 and the encryption key" bash -c '
+  docker compose --env-file "$1" config --format json | jq -e "
+   .services.crm.environment | (.REDIS_URL | endswith(\"/2\")) and (.CRM_ENCRYPTION_KEY | length > 0)"' _ "$tmp/env"
 exit $fail

@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { isBotActive } from "@/agent/config";
+import { enqueueReply } from "@/bot/queue";
 import { getDb, withTenant } from "@/db/client";
 import { contacts, messages, whatsappInstances } from "@/db/schema";
 import { isIgnoredJid, phoneFromJid } from "./jid";
@@ -84,7 +86,7 @@ async function storeMessage(tenantId: string, d: Upsert): Promise<void> {
   const fromMe = d.key.fromMe ?? false;
   const at = sentAt(d.messageTimestamp);
 
-  await withTenant(tenantId, async (tx) => {
+  const contactId = await withTenant(tenantId, async (tx) => {
     const [contact] = await tx
       .insert(contacts)
       .values({
@@ -117,5 +119,16 @@ async function storeMessage(tenantId: string, d: Upsert): Promise<void> {
         sentAt: at,
       })
       .onConflictDoNothing({ target: [messages.tenantId, messages.waMessageId] });
+    return contact.id;
   });
+
+  // Only customers' messages wake the bot, and only while it is on: messages that arrive
+  // while it is off are never answered later. A queue outage must not lose the message.
+  if (fromMe) return;
+  try {
+    if (await isBotActive(tenantId)) await enqueueReply(tenantId, contactId);
+  } catch (e) {
+    const err = e as { code?: unknown; name?: unknown } | null;
+    console.error(`enqueue reply failed: ${String(err?.code ?? err?.name ?? "unknown")}`);
+  }
 }

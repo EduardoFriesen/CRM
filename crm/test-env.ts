@@ -9,3 +9,6 @@ export const testOwnerUrl =
   process.env.CRM_TEST_OWNER_URL ?? `postgresql://crm:${process.env.CRM_DB_PASSWORD}@${host}/crm`;
 export const testAppUrl =
   process.env.CRM_TEST_APP_URL ?? `postgresql://crm_app:${process.env.CRM_APP_DB_PASSWORD}@${host}/crm`;
+
+// Redis db 15 is reserved for tests (the app uses db 2, Evolution db 1).
+export const testRedisUrl = process.env.CRM_TEST_REDIS_URL ?? "redis://127.0.0.1:56379/15";

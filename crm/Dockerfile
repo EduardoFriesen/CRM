@@ -6,7 +6,7 @@ RUN npm ci
 FROM deps AS build
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN npm run build && npm run build:worker
 
 # Runtime: Next standalone server, non-root.
 FROM node:24.19.0-alpine AS runner
@@ -29,3 +29,13 @@ COPY migrate.mjs ./
 COPY drizzle ./drizzle
 USER node
 CMD ["node", "migrate.mjs"]
+
+# Bot worker: BullMQ consumer bundled with esbuild; app role only (RLS applies).
+FROM node:24.19.0-alpine AS worker
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+COPY --from=build /app/dist/worker.mjs ./dist/worker.mjs
+USER node
+CMD ["node", "dist/worker.mjs"]
