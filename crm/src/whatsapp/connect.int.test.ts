@@ -62,4 +62,47 @@ describe("ensureConnection", () => {
     const rows = await ownerSql`select 1 from whatsapp_instances where tenant_id = ${t.id}`;
     expect(rows).toHaveLength(0);
   });
+
+  it("adopts an instance that already exists in Evolution by resetting its webhook secret", async () => {
+    const t = await makeTenant();
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith("/instance/create")) return json({ message: ["name in use"] }, 403);
+      if (url.includes("/webhook/set/")) return json({}, 201);
+      if (url.includes("/instance/connectionState/")) return json({ instance: { state: "close" } });
+      if (url.includes("/instance/connect/")) return json({ base64: "data:image/png;base64,QR" });
+      return json({}, 404);
+    });
+    expect(await ensureConnection(t)).toEqual({ status: "close", qrBase64: "data:image/png;base64,QR" });
+    const [, init] = fetchMock.mock.calls.find(([u]) => String(u).endsWith(`/webhook/set/${t.slug}`))!;
+    const body = JSON.parse(init.body);
+    expect(body.webhook.url).toBe(`http://crm:3000/api/webhooks/evolution/${t.slug}`);
+    const sent = body.webhook.headers["x-crm-webhook-secret"];
+    const [row] = await ownerSql<{ secret_hash: string }[]>`select secret_hash from whatsapp_instances where tenant_id = ${t.id}`;
+    expect(verifySecret(sent, row.secret_hash)).toBe(true);
+  });
+
+  it("re-creates the instance when Evolution lost it, with a new secret", async () => {
+    const t = await makeTenant();
+    evolution("close");
+    await ensureConnection(t);
+    const [before] = await ownerSql<{ secret_hash: string }[]>`select secret_hash from whatsapp_instances where tenant_id = ${t.id}`;
+    fetchMock.mockReset();
+    let created = false;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith("/instance/create")) {
+        created = true;
+        return json({}, 201);
+      }
+      if (!created) return json({ message: "does not exist" }, 404);
+      if (url.includes("/instance/connectionState/")) return json({ instance: { state: "close" } });
+      if (url.includes("/instance/connect/")) return json({ base64: "data:image/png;base64,QR2" });
+      return json({}, 404);
+    });
+    expect(await ensureConnection(t)).toEqual({ status: "close", qrBase64: "data:image/png;base64,QR2" });
+    const [, init] = fetchMock.mock.calls.find(([u]) => String(u).endsWith("/instance/create"))!;
+    const sent = JSON.parse(init.body).webhook.headers["x-crm-webhook-secret"];
+    const [after] = await ownerSql<{ secret_hash: string }[]>`select secret_hash from whatsapp_instances where tenant_id = ${t.id}`;
+    expect(after.secret_hash).not.toBe(before.secret_hash);
+    expect(verifySecret(sent, after.secret_hash)).toBe(true);
+  });
 });

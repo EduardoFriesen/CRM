@@ -32,6 +32,18 @@ async function call(path: string, init: { method?: string; body?: unknown } = {}
 
 const name = (n: string) => encodeURIComponent(n);
 
+function webhookConfig(instanceName: string, secret: string) {
+  return {
+    enabled: true,
+    url: `${env("CRM_INTERNAL_URL")}/api/webhooks/evolution/${name(instanceName)}`,
+    byEvents: false,
+    base64: false,
+    headers: { [WEBHOOK_SECRET_HEADER]: secret },
+    events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+  };
+}
+
+// Evolution answers 403 when the instance name is already in use.
 export async function createInstance(instanceName: string, secret: string): Promise<void> {
   await call("/instance/create", {
     method: "POST",
@@ -40,16 +52,13 @@ export async function createInstance(instanceName: string, secret: string): Prom
       integration: "WHATSAPP-BAILEYS",
       qrcode: true,
       groupsIgnore: true,
-      webhook: {
-        enabled: true,
-        url: `${env("CRM_INTERNAL_URL")}/api/webhooks/evolution/${name(instanceName)}`,
-        byEvents: false,
-        base64: false,
-        headers: { [WEBHOOK_SECRET_HEADER]: secret },
-        events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
-      },
+      webhook: webhookConfig(instanceName, secret),
     },
   });
+}
+
+export async function setWebhook(instanceName: string, secret: string): Promise<void> {
+  await call(`/webhook/set/${name(instanceName)}`, { method: "POST", body: { webhook: webhookConfig(instanceName, secret) } });
 }
 
 const connectResponse = z.object({ base64: z.string().optional() });
