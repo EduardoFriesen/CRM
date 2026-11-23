@@ -31,6 +31,9 @@ const NOT_LEARNED_NOTE: Record<Exclude<NotLearned, null>, string> = {
 export const relayConfirmText = (name: string | null, notLearned: NotLearned) =>
   `Listo, le respondí a ${name || "un cliente"}.${notLearned ? NOT_LEARNED_NOTE[notLearned] : ""}`;
 
+export const relayFailedText = (name: string | null) =>
+  `No le pude mandar la respuesta a ${name || "un cliente"}: el bot está pausado o apagado en esa charla. Respondele vos desde el WhatsApp del negocio.`;
+
 // Sends to the admin's personal WhatsApp through the tenant's own instance.
 export async function notifyAdmin(
   tenantId: string,

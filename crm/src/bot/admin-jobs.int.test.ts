@@ -24,10 +24,14 @@ async function setup() {
   const c = await makeContact(t.id, { name: "Ana", phone: "5491122334455", jid: `549${Date.now() % 1e10}@s.whatsapp.net` });
   return { t, c };
 }
-const escalation = async (tenantId: string, contactId: string, fields: { status?: string; answer?: string | null } = {}) => {
+const escalation = async (
+  tenantId: string,
+  contactId: string,
+  fields: { status?: string; answer?: string | null; isPrice?: boolean } = {},
+) => {
   const [e] = await ownerSql<{ id: string }[]>`
     insert into escalations (tenant_id, contact_id, question, is_price, admin_message_id, status, answer)
-    values (${tenantId}, ${contactId}, '¿Hacen envíos a Pilar?', false, ${"adm-" + Math.random()}, ${fields.status ?? "pending"}, ${fields.answer ?? null})
+    values (${tenantId}, ${contactId}, '¿Hacen envíos a Pilar?', ${fields.isPrice ?? false}, ${"adm-" + Math.random()}, ${fields.status ?? "pending"}, ${fields.answer ?? null})
     returning id`;
   return e.id;
 };
@@ -82,9 +86,10 @@ describe("runRelay", () => {
     const { t, c } = await setup();
     const id = await escalation(t.id, c.id, { status: "answered", answer: "Sí, los martes" });
     const model = new MockLanguageModelV4({ doGenerate: text("¡Te confirmo que sí, los martes!") });
-    const send = vi.fn(async () => ({ id: "RELAY-1" }));
+    const send = vi.fn(async (...[, jid]: [string, string]) => ({ id: jid === ADMIN_JID ? `ADM-${Math.random()}` : "RELAY-1" }));
     expect(await runRelay(t.id, id, { model, send })).toBe("sent");
     expect(send).toHaveBeenCalledWith(t.slug, c.jid, "¡Te confirmo que sí, los martes!");
+    expect(send).toHaveBeenCalledWith(t.slug, ADMIN_JID, "Listo, le respondí a Ana.");
     expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain("Sí, los martes");
     const [row] = await ownerSql<{ author: string }[]>`select author from messages where wa_message_id = 'RELAY-1'`;
     expect(row.author).toBe("bot");
@@ -94,9 +99,14 @@ describe("runRelay", () => {
     const { t, c } = await setup();
     await ownerSql`update contacts set bot_paused_until = now() + interval '1 hour' where id = ${c.id}`;
     const id = await escalation(t.id, c.id, { status: "answered", answer: "Sí" });
-    const send = vi.fn();
+    const send = vi.fn(async () => ({ id: `N-${Math.random()}` }));
     expect(await runRelay(t.id, id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send })).toBe("skipped:paused");
-    expect(send).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalledWith(t.slug, c.jid, expect.anything());
+    expect(send).toHaveBeenCalledWith(
+      t.slug,
+      ADMIN_JID,
+      "No le pude mandar la respuesta a Ana: el bot está pausado o apagado en esa charla. Respondele vos desde el WhatsApp del negocio.",
+    );
   });
 
   it("does nothing for a question that has no answer yet", async () => {
@@ -105,5 +115,45 @@ describe("runRelay", () => {
     expect(await runRelay(t.id, id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send: vi.fn() })).toBe(
       "skipped:not-answered",
     );
+  });
+
+  it("says in the confirmation when a price answer was not learned", async () => {
+    const { t, c } = await setup();
+    const id = await escalation(t.id, c.id, { status: "answered", answer: "Sale $3.500", isPrice: false });
+    const send = vi.fn(async (...[, jid]: [string, string]) => ({ id: `${jid}-${Math.random()}` }));
+    await runRelay(t.id, id, { model: new MockLanguageModelV4({ doGenerate: text("Sale $3.500") }), send });
+    expect(send).toHaveBeenCalledWith(t.slug, ADMIN_JID, "Listo, le respondí a Ana. (no la guardé porque es de precios)");
+  });
+
+  it("does not talk over the admin who wrote while the relay was being generated", async () => {
+    const { t, c } = await setup();
+    const id = await escalation(t.id, c.id, { status: "answered", answer: "Sí" });
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        await ownerSql`insert into messages (tenant_id, contact_id, direction, author, body, wa_message_id, sent_at)
+          values (${t.id}, ${c.id}, 'out', 'admin', 'Te escribo yo', ${"A-" + Math.random()}, now())`;
+        return text("Sí");
+      },
+    });
+    const send = vi.fn(async () => ({ id: `N-${Math.random()}` }));
+    expect(await runRelay(t.id, id, { model, send })).toBe("skipped:not-customer-last");
+    expect(send).not.toHaveBeenCalledWith(t.slug, c.jid, expect.anything());
+  });
+
+  it("leaves a customer message sent during the relay as the last one, so it gets answered", async () => {
+    const { t, c } = await setup();
+    await ownerSql`insert into messages (tenant_id, contact_id, direction, author, body, wa_message_id, sent_at)
+      values (${t.id}, ${c.id}, 'in', 'customer', '¿Envían a Pilar?', ${"C-" + Math.random()}, now() - interval '1 minute')`;
+    const id = await escalation(t.id, c.id, { status: "answered", answer: "Sí" });
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        await ownerSql`insert into messages (tenant_id, contact_id, direction, author, body, wa_message_id, sent_at)
+          values (${t.id}, ${c.id}, 'in', 'customer', 'Y otra cosa', ${"C-" + Math.random()}, now())`;
+        return text("Sí, a Pilar enviamos");
+      },
+    });
+    await runRelay(t.id, id, { model, send: vi.fn(async () => ({ id: `R-${Math.random()}` })) });
+    const [last] = await ownerSql<{ author: string }[]>`select author from messages where contact_id = ${c.id} order by sent_at desc limit 1`;
+    expect(last.author).toBe("customer");
   });
 });

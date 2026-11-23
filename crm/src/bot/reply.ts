@@ -6,7 +6,8 @@ import { withTenant } from "@/db/client";
 import { contacts, escalations, messages, tenants, whatsappInstances } from "@/db/schema";
 import { EvolutionError, sendText } from "@/whatsapp/evolution";
 import { recentFacts } from "@/facts/facts";
-import { notifyAdmin } from "./admin-messages";
+import { whyNotLearned } from "@/facts/facts";
+import { notifyAdmin, relayConfirmText, relayFailedText } from "./admin-messages";
 import { buildSystemPrompt } from "./prompt";
 import { enqueueReminder } from "./queue";
 import { makeTools } from "./tools";
@@ -123,6 +124,17 @@ async function generateOrRecord(
   }
 }
 
+async function adminWroteSince(tenantId: string, contactId: string, since: Date): Promise<boolean> {
+  const [row] = await withTenant(tenantId, (tx) =>
+    tx
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.contactId, contactId), eq(messages.author, "admin"), gt(messages.sentAt, since)))
+      .limit(1),
+  );
+  return !!row;
+}
+
 // One bot turn for a contact: decides whether to answer, asks the tenant's model with
 // catalog/stage tools, sends the reply over WhatsApp and records it as the bot's.
 export async function runConversation(
@@ -174,20 +186,14 @@ export async function runConversation(
   // The reply covers messages up to `cutoff`. If the admin wrote meanwhile, don't talk
   // over them; a customer message newer than the cutoff gets its own follow-up job.
   const cutoff = conv.recent.at(-1)!.sentAt;
-  const [adminSince] = await withTenant(tenantId, (tx) =>
-    tx
-      .select({ id: messages.id })
-      .from(messages)
-      .where(and(eq(messages.contactId, contactId), eq(messages.author, "admin"), gt(messages.sentAt, cutoff)))
-      .limit(1),
-  );
-  if (adminSince) return "skipped:not-customer-last";
+  if (await adminWroteSince(tenantId, contactId, cutoff)) return "skipped:not-customer-last";
 
   await deliver(tenantId, contactId, { instance: conv.instance.name, jid: conv.contact.jid }, text, new Date(cutoff.getTime() + 1), send);
   return "sent";
 }
 
-// Tells the customer what the admin answered to an escalation, in the agent's voice.
+// Tells the customer what the admin answered to an escalation, in the agent's voice, then
+// confirms to the admin — or tells them it couldn't, so they follow up by hand.
 export async function runRelay(
   tenantId: string,
   escalationId: string,
@@ -195,15 +201,35 @@ export async function runRelay(
 ): Promise<ConversationOutcome> {
   const now = deps.now ?? new Date();
   const send = deps.send ?? sendText;
+  const [esc] = await withTenant(tenantId, (tx) =>
+    tx
+      .select({ esc: escalations, name: contacts.name })
+      .from(escalations)
+      .innerJoin(contacts, eq(contacts.id, escalations.contactId))
+      .where(and(eq(escalations.id, escalationId), eq(escalations.status, "answered"))),
+  );
+  if (!esc?.esc.answer) return "skipped:not-answered";
+  const { question, answer, contactId, isPrice, isGeneral } = esc.esc;
+  const tell = (text: string) => notifyAdmin(tenantId, text, { send }).catch(() => recordAgentError(tenantId, "RELAY_NOTIFY"));
+
+  const outcome = await relayToCustomer(tenantId, contactId, question, answer, now, send, deps.model);
+  if (outcome === "sent") await tell(relayConfirmText(esc.name, whyNotLearned(isPrice, isGeneral, question, answer)));
+  else await tell(relayFailedText(esc.name));
+  return outcome;
+}
+
+async function relayToCustomer(
+  tenantId: string,
+  contactId: string,
+  question: string,
+  answer: string,
+  now: Date,
+  send: typeof sendText,
+  model: LanguageModel | undefined,
+): Promise<ConversationOutcome> {
   const rt = await getAgentRuntime(tenantId);
   if (!rt || !rt.enabled || rt.keyStatus === "invalid") return "skipped:disabled";
-
-  const [esc] = await withTenant(tenantId, (tx) =>
-    tx.select().from(escalations).where(and(eq(escalations.id, escalationId), eq(escalations.status, "answered"))),
-  );
-  if (!esc?.answer) return "skipped:not-answered";
-
-  const conv = await loadConversation(tenantId, esc.contactId, now);
+  const conv = await loadConversation(tenantId, contactId, now);
   if (!conv.contact || !conv.instance) return "skipped:disabled";
   if (conv.contact.botPausedUntil && conv.contact.botPausedUntil > now) return "skipped:paused";
   if (conv.botLastHour >= MAX_BOT_REPLIES_PER_HOUR) return "skipped:rate-limit";
@@ -217,13 +243,18 @@ export async function runRelay(
   // Internal note as the last (user) turn: providers expect the conversation to end there.
   history.push({
     role: "user",
-    content: `[Nota interna del equipo, no del cliente] El equipo respondió a la consulta "${esc.question}": "${esc.answer}". Comunicáselo al cliente con tus palabras, sin agregar datos.`,
+    content: `[Nota interna del equipo, no del cliente] El equipo respondió a la consulta "${question}": "${answer}". Comunicáselo al cliente con tus palabras, sin agregar datos.`,
   });
 
-  const reply = await generateOrRecord(tenantId, rt, deps.model, { system, messages: history, tools: {} });
+  const reply = await generateOrRecord(tenantId, rt, model, { system, messages: history, tools: {} });
   if (reply === "skipped:key-invalid" || reply === "skipped:model-error") return reply;
   const text = truncateForWhatsApp(reply.trim());
   if (!text) return "skipped:empty";
-  await deliver(tenantId, esc.contactId, { instance: conv.instance.name, jid: conv.contact.jid }, text, now, send);
+
+  // Same guards as a normal reply: don't talk over an admin who wrote meanwhile, and place
+  // the message right after what it saw so a customer message sent meanwhile stays last.
+  const cutoff = conv.recent.at(-1)?.sentAt ?? now;
+  if (await adminWroteSince(tenantId, contactId, cutoff)) return "skipped:not-customer-last";
+  await deliver(tenantId, contactId, { instance: conv.instance.name, jid: conv.contact.jid }, text, new Date(cutoff.getTime() + 1), send);
   return "sent";
 }

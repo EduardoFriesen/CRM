@@ -3,7 +3,7 @@ import { z } from "zod";
 import { fail, ok, type Result } from "@/lib/result";
 import { withTenant } from "@/db/client";
 import { businessFacts, contacts, escalations, type BusinessFact } from "@/db/schema";
-import { notifyAdmin, relayConfirmText, type NotLearned } from "@/bot/admin-messages";
+import { notifyAdmin, relayFailedText, type NotLearned } from "@/bot/admin-messages";
 import { mentionsMoney } from "@/bot/money-guard";
 import { enqueueRelay } from "@/bot/queue";
 
@@ -16,6 +16,12 @@ export function recentFacts(tenantId: string): Promise<{ question: string; answe
       .orderBy(desc(businessFacts.updatedAt))
       .limit(200),
   );
+}
+
+// Prices are never learned; neither are answers that only apply to one customer.
+export function whyNotLearned(isPrice: boolean, isGeneral: boolean, question: string, answer: string): NotLearned {
+  if (isPrice || mentionsMoney(`${question} ${answer}`)) return "price";
+  return isGeneral ? null : "personal";
 }
 
 const logCode = (what: string, e: unknown) =>
@@ -44,15 +50,18 @@ export async function answerEscalation(tenantId: string, quotedId: string, answe
         contactId: escalations.contactId,
       });
     if (!esc) return null;
-    const notLearned: NotLearned =
-      esc.isPrice || mentionsMoney(`${esc.question} ${text}`) ? "price" : esc.isGeneral ? null : "personal";
-    if (!notLearned) await tx.insert(businessFacts).values({ tenantId, question: esc.question, answer: text, escalationId: esc.id });
+    if (!whyNotLearned(esc.isPrice, esc.isGeneral, esc.question, text)) await tx.insert(businessFacts).values({ tenantId, question: esc.question, answer: text, escalationId: esc.id });
     const [c] = await tx.select({ name: contacts.name }).from(contacts).where(eq(contacts.id, esc.contactId));
-    return { id: esc.id, notLearned, name: c?.name ?? null };
+    return { id: esc.id, name: c?.name ?? null };
   });
   if (!result) return "ignored";
-  await enqueueRelay(tenantId, result.id).catch((e) => logCode("enqueue relay", e));
-  await notifyAdmin(tenantId, relayConfirmText(result.name, result.notLearned)).catch((e) => logCode("admin confirm", e));
+  // The relay job confirms to the admin once the customer actually got the answer.
+  try {
+    await enqueueRelay(tenantId, result.id);
+  } catch (e) {
+    logCode("enqueue relay", e);
+    await notifyAdmin(tenantId, relayFailedText(result.name)).catch((err) => logCode("admin relay-failed", err));
+  }
   return "answered";
 }
 

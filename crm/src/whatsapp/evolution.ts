@@ -12,6 +12,7 @@ export class EvolutionError extends Error {
 }
 
 export type ConnectionState = "open" | "close" | "connecting";
+export const SEND_TIMEOUT_MS = 10_000;
 
 function env(name: string): string {
   const v = process.env[name];
@@ -24,7 +25,7 @@ async function call(path: string, init: { method?: string; body?: unknown } = {}
     method: init.method ?? "GET",
     headers: { apikey: env("EVOLUTION_API_KEY"), "Content-Type": "application/json" },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
   });
   if (!res.ok) throw new EvolutionError(path, res.status);
   return res.json();

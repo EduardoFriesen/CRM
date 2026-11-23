@@ -3,7 +3,9 @@ import { Queue } from "bullmq";
 export const REPLY_QUEUE = "bot-replies";
 export const DEBOUNCE_MS = 8000;
 export const REMINDER_DELAY_MS = 2 * 60 * 60 * 1000;
-export const CHECK_ADMIN_DELAY_MS = 10_000;
+// Well past the Evolution send timeout: a slow send whose echo arrives late must be claimed
+// by the bot before we decide a human typed it.
+export const CHECK_ADMIN_DELAY_MS = 30_000;
 export type ReplyJob = { tenantId: string; contactId: string };
 export type EscalationJob = { tenantId: string; escalationId: string };
 export type CheckAdminJob = { tenantId: string; contactId: string; waMessageId: string };

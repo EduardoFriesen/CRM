@@ -84,7 +84,8 @@ describe("admin channel", () => {
     expect(await status(q.id)).toEqual({ status: "answered", answer: "Sí, los martes" });
     expect(await factsFor(q.id)).toHaveLength(1);
     expect(relay).toHaveBeenCalledExactlyOnceWith(t.id, q.id);
-    expect(notify).toHaveBeenCalledWith(t.id, "Listo, le respondí a Ana.");
+    // The confirmation comes from the relay job, once the customer actually got it.
+    expect(notify).not.toHaveBeenCalledWith(t.id, expect.stringContaining("Listo"));
   });
 
   it("relays but never learns an answer that mentions money", async () => {
@@ -94,7 +95,6 @@ describe("admin channel", () => {
     expect((await status(q.id)).status).toBe("answered");
     expect(await factsFor(q.id)).toHaveLength(0);
     expect(relay).toHaveBeenCalledOnce();
-    expect(notify).toHaveBeenCalledWith(t.id, "Listo, le respondí a Ana. (no la guardé porque es de precios)");
   });
 
   it("never learns answers to price questions", async () => {
