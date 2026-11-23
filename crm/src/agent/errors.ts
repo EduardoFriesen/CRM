@@ -8,4 +8,11 @@ const MESSAGES: Record<string, string> = {
   HTTP_404: "El proveedor no encuentra ese modelo. Revisá el nombre del modelo.",
 };
 
-export const describeAgentError = (code: string): string => MESSAGES[code] ?? `Error del bot: ${code}`;
+export const describeAgentError = (code: string): string => {
+  if (MESSAGES[code]) return MESSAGES[code];
+  if (code === "VERIFY_TIMEOUT")
+    return "No pudimos verificar la key: el proveedor no respondió a tiempo (puede estar saturado). La guardamos igual; probala en el chat de prueba.";
+  if (code.startsWith("VERIFY_"))
+    return `No pudimos verificar la key (${code.slice(7)}): el proveedor dio un error. La guardamos igual; probala en el chat de prueba.`;
+  return `Error del bot: ${code}`;
+};

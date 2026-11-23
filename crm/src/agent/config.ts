@@ -5,7 +5,7 @@ import { withTenant } from "@/db/client";
 import { agentConfigs, tenants, PROVIDERS, type AgentConfigRow, type KeyStatus, type Provider } from "@/db/schema";
 import { fail, ok, type Result } from "@/lib/result";
 import { assertSafeBaseUrl, UnsafeBaseUrlError } from "./base-url";
-import { verifyKey, type KeyCheck, type ModelSettings } from "./model";
+import { verifyKeyDetailed, type KeyCheck, type KeyCheckResult, type ModelSettings } from "./model";
 
 export type AgentView = {
   agentName: string;
@@ -101,7 +101,7 @@ export async function isBotActive(tenantId: string): Promise<boolean> {
 export async function saveAgentConfig(
   tenantId: string,
   input: unknown,
-  verify: (s: ModelSettings) => Promise<KeyCheck> = verifyKey,
+  verify: (s: ModelSettings) => Promise<KeyCheck | KeyCheckResult> = verifyKeyDetailed,
 ): Promise<Result<AgentView>> {
   const parsed = agentInput.safeParse(input);
   if (!parsed.success) {
@@ -126,13 +126,19 @@ export async function saveAgentConfig(
   const settings: ModelSettings = { provider: data.provider, model: data.model, apiKey, baseUrl };
   const unchanged =
     !newKey && existing?.provider === data.provider && existing.model === data.model && existing.baseUrl === baseUrl;
-  const check: KeyCheck = unchanged ? existing.keyStatus : await verify(settings);
+  const result: KeyCheckResult = unchanged
+    ? { status: existing.keyStatus, code: null }
+    : await verify(settings).then((r) => (typeof r === "string" ? { status: r, code: null } : r));
+  const check = result.status;
   if (check === "invalid" && !unchanged) return fail("KEY_INVALID", "El proveedor rechazó la API key");
   const keyStatus: KeyStatus = check === "quota" ? "valid" : check;
   // A fresh check replaces the last error: quota exhausted is flagged, a clean pass clears it.
-  const lastError =
-    unchanged || check === "unverified"
-      ? {}
+  const lastError = unchanged
+    ? {}
+    : check === "unverified"
+      ? result.code
+        ? { lastErrorCode: `VERIFY_${result.code}`, lastErrorAt: sql`now()` }
+        : {}
       : check === "quota"
         ? { lastErrorCode: "QUOTA_EXCEEDED", lastErrorAt: sql`now()` }
         : { lastErrorCode: null, lastErrorAt: null };

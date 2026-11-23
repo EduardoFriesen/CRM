@@ -108,4 +108,12 @@ describe("agent config", () => {
       data: { lastErrorCode: null, lastErrorAt: null },
     });
   });
+
+  it("records why a key could not be verified", async () => {
+    const t = await makeTenant();
+    expect(await saveAgentConfig(t.id, base, async () => ({ status: "unverified" as const, code: "HTTP_503" }))).toMatchObject({
+      success: true,
+      data: { keyStatus: "unverified", lastErrorCode: "VERIFY_HTTP_503" },
+    });
+  });
 });

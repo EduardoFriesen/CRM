@@ -72,14 +72,39 @@ export function isQuotaExhausted(e: unknown): boolean {
 // "quota": the provider accepted the key but refused on usage limits.
 export type KeyCheck = KeyStatus | "quota";
 
-export async function verifyKey(s: ModelSettings, build: ModelFactory = createModel): Promise<KeyCheck> {
+export type KeyCheckResult = { status: KeyCheck; code: string | null };
+
+// The save request goes through nginx (60 s): stay well under it even when the provider is slow.
+const VERIFY_TIMEOUT_MS = 20_000;
+
+const failureCode = (err: unknown): string => {
+  if (APICallError.isInstance(err)) return `HTTP_${err.statusCode ?? "NETWORK"}`;
+  const name = (err as { name?: unknown } | null)?.name;
+  return name === "TimeoutError" || name === "AbortError" ? "TIMEOUT" : String(name ?? "UNKNOWN");
+};
+
+export async function verifyKeyDetailed(
+  s: ModelSettings,
+  build: ModelFactory = createModel,
+  timeoutMs = VERIFY_TIMEOUT_MS,
+): Promise<KeyCheckResult> {
   try {
-    await generateText({ model: await build(s), prompt: "ping", maxOutputTokens: 1, maxRetries: 0 });
-    return "valid";
+    await generateText({
+      model: await build(s),
+      prompt: "ping",
+      maxOutputTokens: 1,
+      maxRetries: 0,
+      abortSignal: AbortSignal.timeout(timeoutMs),
+    });
+    return { status: "valid", code: null };
   } catch (e) {
     const err = unwrap(e);
-    if (isAuthError(err)) return "invalid";
-    if (APICallError.isInstance(err) && err.statusCode === 429) return "quota";
-    return "unverified";
+    if (isAuthError(err)) return { status: "invalid", code: failureCode(err) };
+    if (APICallError.isInstance(err) && err.statusCode === 429) return { status: "quota", code: "HTTP_429" };
+    return { status: "unverified", code: failureCode(err) };
   }
+}
+
+export async function verifyKey(s: ModelSettings, build: ModelFactory = createModel): Promise<KeyCheck> {
+  return (await verifyKeyDetailed(s, build)).status;
 }

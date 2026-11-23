@@ -1,7 +1,7 @@
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it } from "vitest";
-import { verifyKey, type ModelSettings } from "@/agent/model";
+import { verifyKey, verifyKeyDetailed, type ModelSettings } from "@/agent/model";
 
 const settings: ModelSettings = { provider: "anthropic", model: "claude-haiku-5-5", apiKey: "sk-x", baseUrl: null };
 const failing = (error: unknown) => async () =>
@@ -57,5 +57,19 @@ describe("verifyKey", () => {
         }),
       });
     expect(await verifyKey(settings, ok)).toBe("valid");
+  });
+
+  it("says which error made a key unverifiable", async () => {
+    const e = new APICallError({ message: "overloaded", url: "https://x", requestBodyValues: {}, statusCode: 503 });
+    expect(await verifyKeyDetailed(settings, failing(e))).toEqual({ status: "unverified", code: "HTTP_503" });
+  });
+
+  it("gives up on a provider that takes too long", async () => {
+    const slow = async () =>
+      new MockLanguageModelV4({
+        doGenerate: async ({ abortSignal }) =>
+          new Promise((_, reject) => abortSignal?.addEventListener("abort", () => reject(abortSignal.reason))),
+      });
+    expect(await verifyKeyDetailed(settings, slow, 50)).toEqual({ status: "unverified", code: "TIMEOUT" });
   });
 });
