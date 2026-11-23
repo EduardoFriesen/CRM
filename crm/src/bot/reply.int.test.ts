@@ -104,6 +104,33 @@ describe("runConversation", () => {
     expect(contact.stage).toBe("consulta");
   });
 
+  it("never demotes a venta customer to consulta", async () => {
+    const { t, c } = await setup();
+    await ownerSql`update contacts set stage = 'venta' where id = ${c.id}`;
+    await say(t.id, c.id, "customer", "¿Y entonces?");
+    const model = new MockLanguageModelV4({ doGenerate: [stageCall("consulta"), text("Te atiende alguien del equipo")] });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    const [contact] = await ownerSql<{ stage: string }[]>`select stage from contacts where id = ${c.id}`;
+    expect(contact.stage).toBe("venta");
+  });
+
+  it("meters each successful step even when a later step fails", async () => {
+    const { t, c } = await setup();
+    await ownerSql`delete from ai_usage where tenant_id = ${t.id}`;
+    await say(t.id, c.id, "customer", "¿Tienen pan?");
+    let call = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        call++;
+        if (call === 1) return toolCall("search_catalog", { query: "pan" });
+        throw new APICallError({ message: "overloaded", url: "https://x", requestBodyValues: {}, statusCode: 503, isRetryable: true });
+      },
+    });
+    await runConversation(t.id, c.id, { model, send: sendOk() }).catch(() => {});
+    const [u] = await ownerSql<{ requests: number; input_tokens: string }[]>`select requests, input_tokens from ai_usage where tenant_id = ${t.id}`;
+    expect(u).toEqual({ requests: 2, input_tokens: "1" });
+  });
+
   it("reopens a postventa customer who wants to buy again, and tells the model the stage", async () => {
     const { t, c } = await setup();
     await ownerSql`insert into orders (tenant_id, contact_id, status, delivery_date, address, total)

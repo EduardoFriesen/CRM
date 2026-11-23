@@ -55,12 +55,19 @@ export async function generateAgentText(
 ): Promise<string> {
   try {
     // No SDK-level retries: BullMQ retries transient failures, and retrying a 429 here would
-    // only spend more of the provider quota.
-    const result = await generateText({ model, ...args, stopWhen: isStepCount(4), maxRetries: 0 });
-    await meter(tenantId, {
-      requests: result.steps.length,
-      inputTokens: result.totalUsage.inputTokens ?? 0,
-      outputTokens: result.totalUsage.outputTokens ?? 0,
+    // only spend more of the provider quota. Each finished step is metered as it ends, so a
+    // failure in a later step doesn't lose the earlier ones.
+    const result = await generateText({
+      model,
+      ...args,
+      stopWhen: isStepCount(4),
+      maxRetries: 0,
+      onStepFinish: (step) =>
+        meter(tenantId, {
+          requests: 1,
+          inputTokens: step.usage.inputTokens ?? 0,
+          outputTokens: step.usage.outputTokens ?? 0,
+        }),
     });
     return result.text;
   } catch (e) {

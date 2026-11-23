@@ -3,7 +3,6 @@ import { and, count, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { recordAgentError } from "@/agent/config";
 import { searchCatalog } from "@/catalog/catalog";
-import { setContactStage } from "@/contacts/contacts";
 import { withTenant } from "@/db/client";
 import { contacts, escalations, type Stage } from "@/db/schema";
 import { escalationText, handoffText } from "./admin-messages";
@@ -40,12 +39,21 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
       // Venta comes from handoff_to_admin and Postventa from a delivered order: the only
       // move the bot makes on its own is reopening a customer as consulta.
       description: "Vuelve a poner al cliente en Consulta cuando, estando en Postventa, quiere volver a comprar.",
-      inputSchema: z.object({ stage: z.literal("consulta") }),
+      // enum (not literal): providers like Gemini understand JSON-schema enum, not const.
+      inputSchema: z.object({ stage: z.enum(["consulta"]) }),
       execute: async ({ stage }) => {
         opts.onStage?.(stage);
         if (opts.dryRun) return { ok: true };
-        const r = await setContactStage(tenantId, contactId, stage);
-        return { ok: r.success };
+        // Enforced here, not only in the prompt: a card in Venta (handoff) must never be
+        // demoted, even if the model also calls handoff_to_admin in the same step.
+        const moved = await withTenant(tenantId, (tx) =>
+          tx
+            .update(contacts)
+            .set({ stage: "consulta" })
+            .where(and(eq(contacts.id, contactId), eq(contacts.stage, "postventa")))
+            .returning({ id: contacts.id }),
+        );
+        return moved.length > 0 ? { ok: true } : { ok: false, reason: "Solo se vuelve a Consulta desde Postventa" };
       },
     }),
     ask_admin: tool({

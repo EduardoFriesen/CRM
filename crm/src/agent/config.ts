@@ -40,6 +40,21 @@ export type AgentRuntime = ModelSettings & {
 // Checkboxes post "on" when checked and nothing when unchecked.
 const flag = z.preprocess((v) => v === true || v === "on" || v === "true", z.boolean());
 
+// Integer limits as people type them here: "1.000", "200 000" or "1,000" all mean thousands.
+const dailyLimit = z.preprocess(
+  (v) => {
+    if (v === undefined || v === null || v === "") return null;
+    const digits = String(v).replace(/[.\s,_]/g, "");
+    return /^\d+$/.test(digits) ? Number(digits) : Number.NaN;
+  },
+  z
+    .number({ error: "Escribí solo números (ej. 1000)" })
+    .int("Escribí solo números (ej. 1000)")
+    .min(1, "Mínimo 1")
+    .max(1_000_000_000, "Demasiado alto")
+    .nullable(),
+);
+
 export const agentInput = z.object({
   agentName: z.string().trim().min(1, "Poné un nombre").max(60, "Máximo 60 caracteres"),
   tone: z.string().trim().max(2000, "Máximo 2000 caracteres").default(""),
@@ -54,14 +69,8 @@ export const agentInput = z.object({
     (v) => (v === undefined || v === "" ? 12 : v),
     z.coerce.number().int("Tiene que ser un número entero").min(1, "Entre 1 y 168 horas").max(168, "Entre 1 y 168 horas"),
   ),
-  dailyRequestLimit: z.preprocess(
-    (v) => (v === undefined || v === "" || v === null ? null : v),
-    z.union([z.null(), z.coerce.number().int("Número entero").min(1, "Mínimo 1").max(1_000_000_000)]),
-  ),
-  dailyTokenLimit: z.preprocess(
-    (v) => (v === undefined || v === "" || v === null ? null : v),
-    z.union([z.null(), z.coerce.number().int("Número entero").min(1, "Mínimo 1").max(1_000_000_000)]),
-  ),
+  dailyRequestLimit: dailyLimit,
+  dailyTokenLimit: dailyLimit,
   adminPhone: z
     .string()
     .trim()

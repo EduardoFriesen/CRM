@@ -126,4 +126,14 @@ describe("agent config", () => {
       data: { dailyRequestLimit: null, dailyTokenLimit: null },
     });
   });
+
+  it("reads limits written the Argentine way", async () => {
+    const t = await makeTenant();
+    expect(await saveAgentConfig(t.id, { ...base, dailyRequestLimit: "1.000", dailyTokenLimit: "200.000" }, valid)).toMatchObject({
+      data: { dailyRequestLimit: 1000, dailyTokenLimit: 200000 },
+    });
+    expect(await saveAgentConfig(t.id, { ...base, apiKey: "", dailyRequestLimit: "mil" }, valid)).toMatchObject({
+      error: { code: "VALIDATION", details: { dailyRequestLimit: ["Escribí solo números (ej. 1000)"] } },
+    });
+  });
 });
