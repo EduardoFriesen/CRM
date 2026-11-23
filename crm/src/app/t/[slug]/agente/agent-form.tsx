@@ -60,7 +60,9 @@ export function AgentForm({
   const errors: FieldErrors = failed ? ((result.error.details as FieldErrors) ?? {}) : {};
   const current = result?.success ? result.data : view;
   const values = failed ? state.values : fromView(current, adminPhone);
-  const [provider, setProvider] = useState<string>(values.provider);
+  // A saved provider this server doesn't offer (Ollama without OLLAMA_URL) falls back to the first one.
+  const initialProvider = providers.includes(values.provider as Provider) ? values.provider : providers[0];
+  const [provider, setProvider] = useState<string>(initialProvider);
   const status = current ? KEY_STATUS[current.keyStatus] : null;
 
   return (
@@ -70,13 +72,25 @@ export function AgentForm({
         <Field name="agentName" label="Nombre del agente" hint="Cómo se presenta. Ej. Sofi" errors={errors} defaultValue={values.agentName} />
         <div className="field">
           <label htmlFor="provider">Proveedor</label>
-          <select id="provider" name="provider" defaultValue={values.provider} onChange={(e) => setProvider(e.currentTarget.value)}>
+          <select
+            id="provider"
+            name="provider"
+            defaultValue={initialProvider}
+            onChange={(e) => setProvider(e.currentTarget.value)}
+            aria-invalid={errors.provider ? true : undefined}
+            aria-describedby={errors.provider ? "provider-error" : undefined}
+          >
             {providers.map((v) => (
               <option key={v} value={v}>
                 {PROVIDER_LABELS[v]}
               </option>
             ))}
           </select>
+          {errors.provider && (
+            <small id="provider-error" className="error">
+              {errors.provider[0]}
+            </small>
+          )}
         </div>
         <Field name="model" label="Modelo" errors={errors} defaultValue={values.model} list="model-suggestions" hint="Los modelos chicos inventan más: preferí los sugeridos." />
         <datalist id="model-suggestions">
@@ -98,7 +112,7 @@ export function AgentForm({
               type="password"
               autoComplete="off"
               spellCheck={false}
-              placeholder={current ? "Dejala vacía para conservar la actual" : ""}
+              placeholder={current?.apiKeyLast4 ? "Dejala vacía para conservar la actual" : ""}
               aria-invalid={errors.apiKey ? true : undefined}
               aria-describedby="apiKey-hint"
             />

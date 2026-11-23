@@ -155,7 +155,7 @@ async function generateOrRecord(
       return "skipped:key-invalid";
     }
     // Permanent errors (bad request, unknown model…) are recorded, not retried.
-    if (APICallError.isInstance(e) && !e.isRetryable) return "skipped:model-error";
+    if ((APICallError.isInstance(e) && !e.isRetryable) || errorCode(e) === "OLLAMA_UNAVAILABLE") return "skipped:model-error";
     throw e;
   }
 }

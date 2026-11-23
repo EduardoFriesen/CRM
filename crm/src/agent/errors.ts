@@ -6,6 +6,7 @@ const MESSAGES: Record<string, string> = {
   HTTP_401: "El proveedor rechazó la API key.",
   HTTP_403: "El proveedor rechazó la API key.",
   HTTP_404: "El proveedor no encuentra ese modelo. Revisá el nombre del modelo.",
+  OLLAMA_UNAVAILABLE: "Ollama no está disponible en este servidor. Elegí otro proveedor.",
 };
 
 export const describeAgentError = (code: string): string => {

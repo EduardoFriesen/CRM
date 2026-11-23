@@ -11,4 +11,8 @@ describe("describeAgentError", () => {
     expect(describeAgentError("VERIFY_HTTP_503")).toMatch(/HTTP_503/);
   });
   it("falls back to the raw code", () => expect(describeAgentError("EVOLUTION_500")).toContain("EVOLUTION_500"));
+
+  it("explains a missing Ollama", () => {
+    expect(describeAgentError("OLLAMA_UNAVAILABLE")).toBe("Ollama no está disponible en este servidor. Elegí otro proveedor.");
+  });
 });

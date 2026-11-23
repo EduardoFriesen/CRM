@@ -291,6 +291,18 @@ describe("runConversation", () => {
     expect((await getAgentView(t.id))?.lastErrorCode).toBe("QUOTA_EXCEEDED");
   });
 
+  it("skips without retrying when the tenant uses Ollama and this server has none", async () => {
+    vi.stubEnv("OLLAMA_URL", "");
+    const { t, c } = await setup();
+    await ownerSql`update agent_configs set provider = 'ollama' where tenant_id = ${t.id}`;
+    await say(t.id, c.id, "customer", "Hola");
+    const send = sendOk();
+    expect(await runConversation(t.id, c.id, { send })).toBe("skipped:model-error");
+    expect(send).not.toHaveBeenCalled();
+    expect((await getAgentView(t.id))?.lastErrorCode).toBe("OLLAMA_UNAVAILABLE");
+    vi.unstubAllEnvs();
+  });
+
   it("does not retry permanent model errors and records them", async () => {
     const { t, c } = await setup();
     await say(t.id, c.id, "customer", "Hola");

@@ -163,7 +163,10 @@ describe("agent config", () => {
     it("saves as unverified when Ollama is down", async () => {
       vi.stubEnv("OLLAMA_URL", "http://127.0.0.1:9/v1");
       const t = await makeTenant();
-      expect(await saveAgentConfig(t.id, local)).toMatchObject({ success: true, data: { keyStatus: "unverified" } });
+      expect(await saveAgentConfig(t.id, local)).toMatchObject({
+        success: true,
+        data: { keyStatus: "unverified", lastErrorCode: "VERIFY_HTTP_NETWORK" },
+      });
     });
 
     it("asks for a real key when moving back to a cloud provider", async () => {

@@ -55,7 +55,8 @@ export const createModel: ModelFactory = async (s) => {
     }
     case "ollama": {
       const baseURL = ollamaUrl();
-      if (!baseURL) throw new Error("OLLAMA_UNAVAILABLE");
+      // A tenant saved on a dev server that now runs without Ollama: permanent, not retryable.
+      if (!baseURL) throw Object.assign(new Error("OLLAMA_UNAVAILABLE"), { code: "OLLAMA_UNAVAILABLE" });
       // Thinking off: qwen3 spends 4x longer reasoning per reply; non-thinking models ignore it.
       return createOpenAICompatible({
         name: "ollama",

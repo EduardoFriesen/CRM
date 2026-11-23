@@ -9,7 +9,7 @@ import { recentFacts } from "@/facts/facts";
 import { tenants, type Stage } from "@/db/schema";
 import { fail, ok, type Result } from "@/lib/result";
 import { buildSystemPrompt } from "./prompt";
-import { generateAgentText, truncateForWhatsApp } from "./reply";
+import { errorCode, generateAgentText, truncateForWhatsApp } from "./reply";
 import { makeTools } from "./tools";
 
 const historyInput = z
@@ -55,6 +55,7 @@ export async function tryAgent(
   } catch (e) {
     if (isAuthError(e)) return fail("KEY_INVALID", "El proveedor rechazó la API key");
     if (isQuotaExhausted(e)) return fail("QUOTA_EXCEEDED", describeAgentError("QUOTA_EXCEEDED"));
+    if (errorCode(e) === "OLLAMA_UNAVAILABLE") return fail("MODEL_ERROR", describeAgentError("OLLAMA_UNAVAILABLE"));
     return fail("MODEL_ERROR", "El modelo no respondió. Probá de nuevo en unos segundos.");
   }
 }
