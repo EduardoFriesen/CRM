@@ -111,6 +111,7 @@ async function storeMessage(tenantId: string, d: Upsert): Promise<void> {
         tenantId,
         contactId: contact.id,
         direction: fromMe ? "out" : "in",
+        author: fromMe ? "admin" : "customer",
         body: messageText(d),
         waMessageId: d.key.id,
         sentAt: at,

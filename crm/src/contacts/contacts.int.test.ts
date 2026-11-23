@@ -8,8 +8,8 @@ afterAll(async () => {
 });
 
 async function addMessage(tenantId: string, contactId: string, body: string, at: string) {
-  await ownerSql`insert into messages (tenant_id, contact_id, direction, body, wa_message_id, sent_at)
-    values (${tenantId}, ${contactId}, 'in', ${body}, ${crypto.randomUUID()}, ${at})`;
+  await ownerSql`insert into messages (tenant_id, contact_id, direction, author, body, wa_message_id, sent_at)
+    values (${tenantId}, ${contactId}, 'in', 'customer', ${body}, ${crypto.randomUUID()}, ${at})`;
   await ownerSql`update contacts set last_message_at = ${at} where id = ${contactId}`;
 }
 

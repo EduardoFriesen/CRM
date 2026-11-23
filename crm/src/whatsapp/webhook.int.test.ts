@@ -41,6 +41,8 @@ const contactsOf = (jid: string) =>
     select id, name, phone, stage, last_message_at from contacts where tenant_id = ${tenant.id} and jid = ${jid}`;
 const messagesOf = (contactId: string) =>
   ownerSql<{ direction: string; body: string }[]>`select direction, body from messages where contact_id = ${contactId}`;
+const authorsOf = (contactId: string) =>
+  ownerSql<{ author: string }[]>`select author from messages where contact_id = ${contactId} order by sent_at, author`;
 
 describe("handleEvolutionEvent", () => {
   it("creates a contact in consulta with its inbound message", async () => {
@@ -94,6 +96,7 @@ describe("handleEvolutionEvent", () => {
     const [c] = await contactsOf(jid);
     expect(c.name).toBe("Ana");
     expect((await messagesOf(c.id)).map((m) => m.direction).sort()).toEqual(["in", "out"]);
+    expect((await authorsOf(c.id)).map((m) => m.author).sort()).toEqual(["admin", "customer"]);
   });
 
   it("labels non-text messages by type", async () => {

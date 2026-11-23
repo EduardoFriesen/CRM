@@ -13,8 +13,8 @@ test.beforeAll(async () => {
   const [ana] = await sql<{ id: string }[]>`
     insert into contacts (tenant_id, jid, phone, name, last_message_at)
     values (${t.id}, '5491122334455@s.whatsapp.net', '5491122334455', 'Ana', now()) returning id`;
-  await sql`insert into messages (tenant_id, contact_id, direction, body, wa_message_id, sent_at)
-    values (${t.id}, ${ana.id}, 'in', '¿Tienen pan de campo?', ${"m-" + suffix}, now())`;
+  await sql`insert into messages (tenant_id, contact_id, direction, author, body, wa_message_id, sent_at)
+    values (${t.id}, ${ana.id}, 'in', 'customer', '¿Tienen pan de campo?', ${"m-" + suffix}, now())`;
   await sql`insert into contacts (tenant_id, jid, phone, name, last_message_at)
     values (${t.id}, '99887766@lid', null, 'Bruno', now() - interval '1 hour')`;
 });
