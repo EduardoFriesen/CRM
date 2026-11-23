@@ -43,6 +43,9 @@ Flujo:
 - **API keys:** se guardan cifradas (AES-256-GCM) con `CRM_ENCRYPTION_KEY` (64 hex, `openssl rand -hex 32`), que solo tienen `crm` y `crm-worker`. **Si cambiás esa clave, todas las keys guardadas dejan de servir** y cada negocio tiene que volver a cargarla. Si el proveedor rechaza la key (401/403), el bot se apaga solo y la pantalla Agente lo muestra.
 - **Proveedores:** Anthropic, Google, OpenAI y compatibles con OpenAI (OpenRouter, Groq…). La URL de un proveedor compatible tiene que ser `https://` y apuntar a una IP pública: no se aceptan direcciones de la red local ni de Docker (por eso Ollama en la LAN no funciona por ahora).
 - **Datos personales (Ley 25.326):** el texto de las conversaciones se envía al proveedor de IA que elige cada negocio; tiene que figurar en su política de privacidad.
+- **Consultas al admin:** si al bot le falta un dato, se lo pregunta al **WhatsApp del administrador** (se configura en Agente) y al cliente le dice "lo consulto y te aviso". **Respondé citando el mensaje de la consulta**: el bot le transmite la respuesta al cliente con sus palabras y la guarda en **Aprendido** para la próxima vez. **Los precios nunca se aprenden**: si la consulta es de precios o tu respuesta menciona plata, se transmite pero no se guarda (los precios van en el Catálogo). Si no respondés en 2 h, te llega un recordatorio una sola vez. Las consultas pendientes se ven en Aprendido.
+- **Traspaso:** cuando el cliente quiere cerrar la compra, el bot le avisa que lo atiende alguien del equipo, mueve la tarjeta a Venta, te avisa por WhatsApp y se **pausa en esa charla** (12 h por defecto, configurable en Agente). Atendé desde el WhatsApp del negocio. Si escribís vos desde el número del negocio en cualquier charla, también se pausa. La tarjeta muestra "Bot pausado hasta …" y el botón **Reactivar bot**. Los mensajes que llegan durante la pausa no se contestan después.
+- **El número del administrador** nunca aparece como cliente ni recibe respuestas del bot.
 - **Diagnóstico:** `docker compose logs crm-worker` muestra por respuesta solo ids, resultado (`sent`, `skipped:...`) y duración; nunca textos ni teléfonos. El último error del bot también aparece en la pantalla Agente.
 
 Base de datos: la app usa la base `crm` con dos roles. `crm` es el dueno y solo lo usa el servicio `crm-migrate` (aplica migraciones y termina); `crm_app` es el que usa la app y esta sujeto a Row Level Security por negocio. En un volumen de Postgres que ya existia, crea la base y los roles una vez:
@@ -109,6 +112,9 @@ No se ejecuto automaticamente; completar y registrar el resultado en la descripc
 - [ ] Escribirle desde otro telefono "¿tienen <producto>?": responde con el precio y "disponible" sin decir cantidades.
 - [ ] Preguntar algo que no está en el catálogo ni en la información: responde "no tengo ese dato, te lo confirma alguien del equipo".
 - [ ] Decirle que lo querés comprar: la tarjeta pasa a Venta.
+- [ ] Preguntar algo que no está cargado: al WhatsApp del admin llega la consulta; responderla citando el mensaje; el cliente recibe la respuesta; volver a preguntar lo mismo y que conteste sin consultar.
+- [ ] Preguntar un precio que no está en el catálogo: consulta siempre (no aprende).
+- [ ] "Lo quiero comprar, ¿cómo pago?": llega el aviso de traspaso, la tarjeta muestra "Bot pausado" y "Reactivar bot" la reactiva.
 - [ ] Escribir en un grupo donde este el numero: no debe responder.
 - [ ] Reiniciar el stack (`docker compose restart`) y confirmar que la instancia sigue conectada.
 
