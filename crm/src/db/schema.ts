@@ -47,6 +47,7 @@ export const contacts = pgTable(
     name: text(),
     stage: stage().notNull().default("consulta"),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+    botPausedUntil: timestamp("bot_paused_until", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique().on(t.tenantId, t.jid)],
@@ -87,7 +88,9 @@ export const products = pgTable(
 );
 export type Product = typeof products.$inferSelect;
 
-export const agentConfigs = pgTable("agent_configs", {
+export const agentConfigs = pgTable(
+  "agent_configs",
+  {
   tenantId: uuid("tenant_id")
     .primaryKey()
     .references(() => tenants.id, { onDelete: "cascade" }),
@@ -104,6 +107,44 @@ export const agentConfigs = pgTable("agent_configs", {
   discloseAi: boolean("disclose_ai").notNull().default(true),
   lastErrorCode: text("last_error_code"),
   lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  pauseHours: integer("pause_hours").notNull().default(12),
+  adminHintAt: timestamp("admin_hint_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("agent_configs_pause_hours_check", sql`${t.pauseHours} between 1 and 168`)],
+);
+export type AgentConfigRow = typeof agentConfigs.$inferSelect;
+
+export const escalationStatus = pgEnum("escalation_status", ["pending", "answered"]);
+
+export const escalations = pgTable(
+  "escalations",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tenantId: tenantId(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    question: text().notNull(),
+    isPrice: boolean("is_price").notNull(),
+    adminMessageId: text("admin_message_id").notNull(),
+    status: escalationStatus().notNull().default("pending"),
+    answer: text(),
+    remindedAt: timestamp("reminded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+  },
+  (t) => [unique().on(t.tenantId, t.adminMessageId)],
+);
+export type Escalation = typeof escalations.$inferSelect;
+
+export const businessFacts = pgTable("business_facts", {
+  id: uuid().primaryKey().defaultRandom(),
+  tenantId: tenantId(),
+  question: text().notNull(),
+  answer: text().notNull(),
+  escalationId: uuid("escalation_id").references(() => escalations.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
-export type AgentConfigRow = typeof agentConfigs.$inferSelect;
+export type BusinessFact = typeof businessFacts.$inferSelect;

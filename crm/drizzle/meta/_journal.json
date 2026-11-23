@@ -50,6 +50,20 @@
       "when": 1795445280862,
       "tag": "0006_bot_claims_sent_at",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795447856242,
+      "tag": "0007_entrega2b",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795447856723,
+      "tag": "0008_entrega2b_rls",
+      "breakpoints": true
     }
   ]
 }
