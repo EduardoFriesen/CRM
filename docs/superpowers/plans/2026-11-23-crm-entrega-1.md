@@ -4,7 +4,7 @@
 
 **Goal:** App `crm` multi-negocio, sin login, donde el superadmin da de alta negocios, cada negocio conecta su WhatsApp por QR y ve a sus clientes en un tablero de tres etapas. La tarjeta abre `wa.me`.
 
-**Architecture:** Servicio Next.js nuevo en el compose, con base `crm` en el Postgres existente. Las migraciones corren con el rol dueño `crm` en un servicio de un solo uso (`crm-migrate`) y la app usa el rol `crm_app`, sin privilegios de dueño, con RLS por `app.tenant_id`. Evolution manda los mensajes por webhook interno (`http://crm:3000`, no publicado en nginx), autenticado con un secreto por instancia en un header.
+**Architecture:** Primero se retira Flowise (la app está en desarrollo y el bot nuevo llega en la entrega 2). Después se suma un servicio Next.js nuevo en el compose, con base `crm` en el Postgres existente. Las migraciones corren con el rol dueño `crm` en un servicio de un solo uso (`crm-migrate`) y la app usa el rol `crm_app`, sin privilegios de dueño, con RLS por `app.tenant_id`. Evolution manda los mensajes por webhook interno (`http://crm:3000`, no publicado en nginx), autenticado con un secreto por instancia en un header.
 
 **Tech Stack:** Node 24, Next.js (última estable, App Router, `output: "standalone"`), TypeScript estricto, Drizzle ORM + drizzle-kit + `postgres` (postgres.js), Zod, Vitest, Playwright, ESLint (`eslint-config-next`).
 
@@ -63,6 +63,23 @@ crm/
 Los tests unitarios van junto al archivo (`*.test.ts`). Los de integración (`*.int.test.ts`) necesitan `CRM_TEST_OWNER_URL` y `CRM_TEST_APP_URL`, que apuntan a `127.0.0.1:55432` con `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres`.
 
 ---
+
+### Task 0: Retirar Flowise
+
+**Files:**
+- Modify: `docker-compose.yml` (quitar el servicio `flowise`, el volumen `flowise_data`, `FLOWISE_DB_PASSWORD` del env de postgres, `flowise` de `depends_on` de nginx y `FLOWISE_ENABLED` de evolution), `nginx/nginx.conf` (quitar `upstream flowise` y el `server flowise.localhost`), `postgres/init/01-create-databases.sh` (solo evolution), `.env.example` (quitar `FLOWISE_*`), `tests/smoke.sh`, `tests/db-isolation.sh`, `README.md` (quitar las secciones 2 y 3 y las menciones a Flowise; la memoria de charlas pasa a ser "llega con el bot de la entrega 2")
+
+**Interfaces:**
+- Produces: un stack sin Flowise. Los servicios quedan en `postgres`, `redis`, `evolution-api` y `nginx`.
+
+- [ ] **Step 1: Ajustar los tests.**
+  - `smoke.sh`: sacar flowise del loop de servicios y de los chequeos de flowise. Los chequeos de cabeceras pasan a `Host: evolution.localhost`. Agregar `flowise.localhost` → 444/000 (host desconocido).
+  - `db-isolation.sh`: sacar las líneas de flowise. Las negaciones cruzadas las retoma la Task 1 con `crm`.
+  - `static.sh`: agregar el chequeo de que ninguna variable `FLOWISE_` aparece en `.env.example` ni en `docker-compose.yml`.
+- [ ] **Step 2: Correr** `bash tests/static.sh`. Esperado: FAIL en el chequeo de Flowise.
+- [ ] **Step 3: Quitar Flowise** de los archivos listados. Para el volumen existente, en el README: `docker compose exec -T postgres psql -U postgres -c 'DROP DATABASE IF EXISTS flowise' -c 'DROP ROLE IF EXISTS flowise'` y `docker volume rm <proyecto>_flowise_data` (**borra los chatflows y la memoria de Flowise**). Lo corre el usuario, no el plan.
+- [ ] **Step 4: Verificar** `bash tests/static.sh && bash tests/smoke.sh && bash tests/db-isolation.sh`. Esperado: todo `ok`. Además, `docker compose up -d --remove-orphans` deja de levantar flowise.
+- [ ] **Step 5: Commit** `refactor: retire flowise from the stack`
 
 ### Task 1: Base `crm` y roles en Postgres
 
@@ -257,7 +274,7 @@ Los tests unitarios van junto al archivo (`*.test.ts`). Los de integración (`*.
   - el aviso en **negrita** de que no hay login y que no se debe exponer hasta Keycloak;
   - cómo crear la base en un volumen existente (`docker compose exec -T postgres bash /docker-entrypoint-initdb.d/02-create-crm-db.sh`);
   - dev y tests con `docker-compose.dev.yml` y las variables `CRM_TEST_*`;
-  - mientras dure la entrega 1, cada instancia nueva necesita registrar el bot de Flowise a mano (`POST /flowise/create/<slug>`, sección 3).
+  - en la entrega 1 el bot no contesta: el bot nuevo llega en la entrega 2.
 - [ ] **Step 2: Verificación final.** En `crm/`: `npm run lint && npm run typecheck && npm test && npm run test:e2e && npm audit --audit-level=high`. En la raíz: `bash tests/static.sh && bash tests/smoke.sh && bash tests/db-isolation.sh && gitleaks detect`. Esperado: todo en verde, sin hallazgos.
 - [ ] **Step 3: Manual end to end.** Crear un negocio, conectar el número por QR, escribir desde otro teléfono, ver la tarjeta en "consulta", abrir `wa.me` y moverla a "venta".
 - [ ] **Step 4: Commit** `docs: document crm setup and no-auth warning`

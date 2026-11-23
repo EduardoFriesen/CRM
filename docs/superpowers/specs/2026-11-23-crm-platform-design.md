@@ -92,7 +92,7 @@ Usuarios y membresías llegan con Keycloak.
 - **Debounce** de unos segundos para juntar los mensajes seguidos del cliente.
 - **Probar agente**: un chat de prueba dentro de la plataforma, que usa la configuración real sin enviar nada por WhatsApp.
 - **Etapas**: las marca el bot con `set_stage` y el admin puede corregirlas. Desde la entrega 3, crear un pedido → venta y pedido entregado → postventa.
-- Flowise se retira cuando la entrega 2 esté en uso.
+- Flowise se retira en la entrega 1: la app está en desarrollo y nadie la usa, así que no hace falta que el bot conteste mientras tanto (decisión del usuario).
 
 ## Ley 25.326
 - Retención de mensajes configurable por negocio (12 meses por defecto), con un job que purga lo vencido.
@@ -110,7 +110,8 @@ WhatsApp puede ocultar el número detrás de un JID `@lid`. Si Evolution no mand
 4. Conectar WhatsApp desde la app: crear la instancia, mostrar el QR y el estado, y configurar el webhook.
 5. Webhook: valida el secreto, crea o actualiza el contacto, guarda el mensaje (idempotente) y actualiza `last_message_at`.
 6. Tablero de clientes: tres columnas. La tarjeta muestra nombre, teléfono, último mensaje y estado del bot. El click abre `wa.me`; la etapa se cambia con un control aparte. Contempla los 4 estados (ideal, loading, error, vacío) y es accesible por teclado.
-7. En esta entrega la etapa es manual (arranca en "consulta") y Flowise sigue contestando.
+7. En esta entrega la etapa es manual (arranca en "consulta").
+8. Se retira Flowise del stack: servicio, base y rol, nginx, variables y README. El bot no contesta hasta la entrega 2. La memoria de conversaciones de Flowise se descarta.
 
 ## Verificación
 - Vitest con TDD para la lógica de negocio: `getCurrentTenant()`, parseo del webhook, armado del `wa.me`, cálculo de la pausa y la etapa.
