@@ -67,6 +67,23 @@ Debajo de la navegación de cada negocio hay una barra con el consumo **del día
 
 Los proveedores no informan cuánta cuota queda. Para ver "N de M", cargá en **Agente** el "Límite diario de pedidos" y/o "de tokens" de tu plan: la barra avisa **Cerca del límite** al 80% y **Límite alcanzado** al 100%. Es aproximado: cada proveedor reinicia la cuota en su horario (Google, a medianoche del Pacífico).
 
+## Modelo local (solo desarrollo)
+
+Para probar el bot sin cuotas ni proveedores pagos, el compose de desarrollo ofrece el proveedor **"Ollama (local, solo desarrollo)"** en Agente. No pide API key. **En producción no existe**: aparece solo si el servidor tiene `OLLAMA_URL`, que define únicamente `docker-compose.dev.yml`.
+
+1. Instalá Ollama en la máquina (pide sudo): `curl -fsSL https://ollama.com/install.sh | sh`. Escucha en `127.0.0.1:11434`; no lo expongas en la red.
+2. Docker sin root no deja a los contenedores llegar al `127.0.0.1` del host. Habilitalo una vez:
+   ```
+   mkdir -p ~/.config/systemd/user/docker.service.d
+   printf '[Service]\nEnvironment=DOCKERD_ROOTLESS_ROOTLESSKIT_DISABLE_HOST_LOOPBACK=false\n' > ~/.config/systemd/user/docker.service.d/ollama-loopback.conf
+   systemctl --user daemon-reload && systemctl --user restart docker
+   ```
+   Los contenedores ven el host como `10.0.2.2`. **Costo**: cualquier contenedor de la máquina puede conectarse a servicios del `127.0.0.1` del host. Para revertir, borrá ese archivo y reiniciá Docker.
+3. Bajá un modelo (`ollama pull qwen3:8b` o `llama3.1:8b`; con 6 GB de VRAM, ~8B es el techo), levantá el stack con `-f docker-compose.dev.yml` y elegí el proveedor en Agente.
+4. Para comparar modelos: `cd crm && EVAL_MODEL=qwen3:8b npm run eval:agent`. Corre 5 charlas (precio del catálogo, precio que no existe, dato que falta, compra → traspaso, "¿sos un bot?") dos veces e imprime cuántas aprobó y cuánto tardó. No es parte de la suite: depende de un modelo real.
+
+Los modelos locales chicos siguen peor las reglas que los grandes: usalos para desarrollar, no como referencia de calidad.
+
 ## Pedidos
 
 - Se crean desde la tarjeta de un cliente en **Venta** (botón **Crear pedido**): productos del catálogo con cantidad, fecha de entrega y datos de envío. El total sale de los precios del catálogo, que quedan congelados en el pedido.

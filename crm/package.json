@@ -12,7 +12,8 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node migrate.mjs",
-    "build:worker": "esbuild src/worker.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=dist/worker.mjs"
+    "build:worker": "esbuild src/worker.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=dist/worker.mjs",
+    "eval:agent": "vitest run --config vitest.eval.config.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.107",
