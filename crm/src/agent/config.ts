@@ -20,6 +20,7 @@ export type AgentView = {
   discloseAi: boolean;
   lastErrorCode: string | null;
   lastErrorAt: Date | null;
+  pauseHours: number;
 };
 
 export type AgentRuntime = ModelSettings & {
@@ -29,6 +30,7 @@ export type AgentRuntime = ModelSettings & {
   enabled: boolean;
   discloseAi: boolean;
   keyStatus: KeyStatus;
+  pauseHours: number;
 };
 
 // Checkboxes post "on" when checked and nothing when unchecked.
@@ -59,6 +61,7 @@ const toView = (r: AgentConfigRow): AgentView => ({
   discloseAi: r.discloseAi,
   lastErrorCode: r.lastErrorCode,
   lastErrorAt: r.lastErrorAt,
+  pauseHours: r.pauseHours,
 });
 
 const load = async (tenantId: string) =>

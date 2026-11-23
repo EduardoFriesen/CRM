@@ -5,7 +5,10 @@ import { createModel, isAuthError } from "@/agent/model";
 import { withTenant } from "@/db/client";
 import { contacts, messages, tenants, whatsappInstances } from "@/db/schema";
 import { EvolutionError, sendText } from "@/whatsapp/evolution";
+import { recentFacts } from "@/facts/facts";
+import { notifyAdmin } from "./admin-messages";
 import { buildSystemPrompt } from "./prompt";
+import { enqueueReminder } from "./queue";
 import { makeTools } from "./tools";
 
 const HISTORY = 20;
@@ -20,7 +23,8 @@ export type ConversationOutcome =
   | "skipped:rate-limit"
   | "skipped:key-invalid"
   | "skipped:empty"
-  | "skipped:model-error";
+  | "skipped:model-error"
+  | "skipped:paused";
 
 // Cuts at the last sentence end (". ") or line break before the limit. A bare "." is not
 // a boundary: es-AR prices use it for thousands ("$12.500").
@@ -75,7 +79,12 @@ async function loadConversation(tenantId: string, contactId: string, now: Date) 
 export async function runConversation(
   tenantId: string,
   contactId: string,
-  deps: { send?: typeof sendText; now?: Date; model?: LanguageModel } = {},
+  deps: {
+    send?: typeof sendText;
+    now?: Date;
+    model?: LanguageModel;
+    scheduleReminder?: (escalationId: string) => Promise<void>;
+  } = {},
 ): Promise<ConversationOutcome> {
   const now = deps.now ?? new Date();
   const send = deps.send ?? sendText;
@@ -84,11 +93,13 @@ export async function runConversation(
 
   const conv = await loadConversation(tenantId, contactId, now);
   if (!conv.contact || !conv.instance) return "skipped:disabled";
+  if (conv.contact.botPausedUntil && conv.contact.botPausedUntil > now) return "skipped:paused";
   if (conv.recent.at(-1)?.author !== "customer") return "skipped:not-customer-last";
   if (conv.botLastHour >= MAX_BOT_REPLIES_PER_HOUR) return "skipped:rate-limit";
 
   const introduce = rt.discloseAi && (!conv.lastBotAt || now.getTime() - conv.lastBotAt.getTime() > INTRO_GAP_MS);
-  const system = buildSystemPrompt({ ...rt, tenantName: conv.tenantName, introduce, now });
+  const facts = await recentFacts(tenantId);
+  const system = buildSystemPrompt({ ...rt, tenantName: conv.tenantName, introduce, now, facts });
   // Providers expect the conversation to open with the user: drop leading bot/admin turns.
   const firstCustomer = conv.recent.findIndex((m) => m.author === "customer");
   const history: ModelMessage[] = conv.recent.slice(firstCustomer).map((m) => ({
@@ -99,7 +110,13 @@ export async function runConversation(
   let reply: string;
   try {
     const model = deps.model ?? (await createModel(rt));
-    reply = await generateAgentText(model, { system, messages: history, tools: makeTools(tenantId, contactId, { dryRun: false }) });
+    reply = await generateAgentText(model, { system, messages: history, tools: makeTools(tenantId, contactId, {
+        dryRun: false,
+        notify: (t) => notifyAdmin(tenantId, t, { send }),
+        scheduleReminder: deps.scheduleReminder ?? ((id) => enqueueReminder(tenantId, id)),
+        pauseHours: rt.pauseHours,
+      }),
+    });
   } catch (e) {
     await recordAgentError(tenantId, errorCode(e));
     if (isAuthError(e)) {

@@ -2,6 +2,7 @@ import { Queue } from "bullmq";
 
 export const REPLY_QUEUE = "bot-replies";
 export const DEBOUNCE_MS = 8000;
+export const REMINDER_DELAY_MS = 2 * 60 * 60 * 1000;
 export type ReplyJob = { tenantId: string; contactId: string };
 
 export function redisConnection() {
@@ -63,4 +64,21 @@ export async function enqueueReply(tenantId: string, contactId: string): Promise
   );
   added.catch(() => {}); // a late rejection after the timeout is already reported
   await Promise.race([added, timeout(ENQUEUE_TIMEOUT_MS)]);
+}
+
+async function addWithTimeout(promise: Promise<unknown>): Promise<void> {
+  promise.catch(() => {});
+  await Promise.race([promise, timeout(ENQUEUE_TIMEOUT_MS)]);
+}
+
+// One reminder per escalation, 2 h later (the worker sends it only if still pending).
+export async function enqueueReminder(tenantId: string, escalationId: string): Promise<void> {
+  await addWithTimeout(
+    getReplyQueue().add("remind", { tenantId, escalationId } as never, {
+      delay: REMINDER_DELAY_MS,
+      jobId: `remind:${escalationId}`,
+      removeOnComplete: 1000,
+      removeOnFail: 1000,
+    }),
+  );
 }

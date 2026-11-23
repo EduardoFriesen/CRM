@@ -15,6 +15,16 @@ const usage = {
   outputTokens: { total: 1, text: 1, reasoning: undefined },
 };
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }], finishReason: { unified: "stop" as const, raw: undefined }, usage, warnings: [] });
+const toolCall = (toolName: string, input: object) => ({
+  content: [{ type: "tool-call" as const, toolCallId: `c-${toolName}`, toolName, input: JSON.stringify(input) }],
+  finishReason: { unified: "tool-calls" as const, raw: undefined },
+  usage,
+  warnings: [],
+});
+const ADMIN_JID = "5491100000000@s.whatsapp.net";
+// What a tool returned to the model on the follow-up step.
+const toolOutput = (model: MockLanguageModelV4) =>
+  JSON.stringify(model.doGenerateCalls[1]?.prompt.filter((m) => m.role === "tool") ?? []);
 const stageCall = (stage: string) => ({
   content: [{ type: "tool-call" as const, toolCallId: "c1", toolName: "set_stage", input: JSON.stringify({ stage }) }],
   finishReason: { unified: "tool-calls" as const, raw: undefined },
@@ -200,5 +210,95 @@ describe("runConversation", () => {
     expect(await runConversation(t.id, c.id, { model, send })).toBe("skipped:model-error");
     expect(send).not.toHaveBeenCalled();
     expect((await getAgentView(t.id))?.lastErrorCode).toBe("HTTP_404");
+  });
+
+  describe("2b: admin questions, handoff and pause", () => {
+    it("asks the admin, records the escalation, schedules a reminder and answers the customer", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "¿Hacen envíos a Pilar?");
+      const model = new MockLanguageModelV4({
+        doGenerate: [toolCall("ask_admin", { question: "¿Hacen envíos a Pilar?", is_price: false }), text("Lo consulto y te aviso.")],
+      });
+      const send = vi.fn(async (_i: string, jid: string) => ({ id: jid === ADMIN_JID ? "ADM-1" : "CUS-1" }));
+      const scheduleReminder = vi.fn(async () => {});
+      expect(await runConversation(t.id, c.id, { model, send, scheduleReminder })).toBe("sent");
+      expect(send).toHaveBeenCalledWith(t.slug, ADMIN_JID, "Consulta de Ana (+5491122334455): ¿Hacen envíos a Pilar? Respondé citando este mensaje.");
+      expect(send).toHaveBeenCalledWith(t.slug, c.jid, "Lo consulto y te aviso.");
+      const [esc] = await ownerSql<{ id: string; status: string; admin_message_id: string; is_price: boolean }[]>`
+        select id, status, admin_message_id, is_price from escalations where contact_id = ${c.id}`;
+      expect(esc).toMatchObject({ status: "pending", admin_message_id: "ADM-1", is_price: false });
+      expect(scheduleReminder).toHaveBeenCalledWith(esc.id);
+    });
+
+    it("stops asking after 3 pending questions for the same contact", async () => {
+      const { t, c } = await setup();
+      for (let i = 0; i < 3; i++) {
+        await ownerSql`insert into escalations (tenant_id, contact_id, question, is_price, admin_message_id)
+          values (${t.id}, ${c.id}, ${"q" + i}, false, ${"pend-" + i + Math.random()})`;
+      }
+      await say(t.id, c.id, "customer", "¿Y los domingos?");
+      const model = new MockLanguageModelV4({
+        doGenerate: [toolCall("ask_admin", { question: "¿Abren los domingos?", is_price: false }), text("No tengo ese dato.")],
+      });
+      const send = vi.fn(async (_i: string, _jid: string) => ({ id: `X-${Math.random()}` }));
+      await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
+      expect(send.mock.calls.some(([, jid]) => jid === ADMIN_JID)).toBe(false);
+      expect(toolOutput(model)).toContain('"ok":false');
+      expect(toolOutput(model)).toContain("no tengo ese dato");
+    });
+
+    it("does not record an escalation when the admin cannot be reached", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "¿Envíos?");
+      const model = new MockLanguageModelV4({
+        doGenerate: [toolCall("ask_admin", { question: "¿Envíos?", is_price: false }), text("No tengo ese dato.")],
+      });
+      const send = vi.fn(async (_i: string, jid: string) => {
+        if (jid === ADMIN_JID) throw new Error("evolution down");
+        return { id: "CUS" };
+      });
+      await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
+      expect(await ownerSql`select 1 from escalations where contact_id = ${c.id}`).toHaveLength(0);
+      expect(toolOutput(model)).toContain('"ok":false');
+    });
+
+    it("hands off: pauses the chat, moves it to venta and tells the admin", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "Dale, lo quiero. ¿Cómo pago?");
+      const model = new MockLanguageModelV4({
+        doGenerate: [toolCall("handoff_to_admin", { reason: "Quiere 3 docenas para el sábado" }), text("Te atiende alguien del equipo.")],
+      });
+      const send = vi.fn(async (_i: string, jid: string) => ({ id: `${jid}-${Math.random()}` }));
+      await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
+      const [row] = await ownerSql<{ stage: string; bot_paused_until: Date }[]>`select stage, bot_paused_until from contacts where id = ${c.id}`;
+      expect(row.stage).toBe("venta");
+      expect(Math.abs(row.bot_paused_until.getTime() - (Date.now() + 12 * 3600_000))).toBeLessThan(60_000);
+      expect(send).toHaveBeenCalledWith(
+        t.slug,
+        ADMIN_JID,
+        "Traspaso: Ana (+5491122334455) quiere cerrar una compra. Quiere 3 docenas para el sábado. Atendelo desde el WhatsApp del negocio.",
+      );
+    });
+
+    it("stays quiet while the conversation is paused, and answers new messages once the pause is over", async () => {
+      const { t, c } = await setup();
+      await ownerSql`update contacts set bot_paused_until = now() + interval '1 hour' where id = ${c.id}`;
+      await say(t.id, c.id, "customer", "Hola");
+      const send = sendOk();
+      expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send })).toBe("skipped:paused");
+      expect(send).not.toHaveBeenCalled();
+      await ownerSql`update contacts set bot_paused_until = now() - interval '1 minute' where id = ${c.id}`;
+      await say(t.id, c.id, "customer", "¿Siguen ahí?");
+      expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("Sí") }), send })).toBe("sent");
+    });
+
+    it("gives the model what the team already answered", async () => {
+      const { t, c } = await setup();
+      await ownerSql`insert into business_facts (tenant_id, question, answer) values (${t.id}, '¿Envían a Pilar?', 'Sí, los martes')`;
+      await say(t.id, c.id, "customer", "¿Envían a Pilar?");
+      const model = new MockLanguageModelV4({ doGenerate: text("Sí, los martes") });
+      await runConversation(t.id, c.id, { model, send: sendOk() });
+      expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain("Sí, los martes");
+    });
   });
 });

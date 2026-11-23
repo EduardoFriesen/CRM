@@ -31,7 +31,7 @@ describe("tryAgent", () => {
       ],
     });
     const r = await tryAgent(t.id, [{ role: "user", text: "Quiero comprar" }], { model });
-    expect(r).toEqual({ success: true, data: { reply: "¡Genial!", stage: "venta" } });
+    expect(r).toEqual({ success: true, data: { reply: "¡Genial!", stage: "venta", adminNote: null } });
     const stages = await ownerSql<{ stage: string }[]>`select stage from contacts where tenant_id = ${t.id}`;
     expect(stages).toEqual([{ stage: "consulta" }]);
   });
@@ -53,6 +53,25 @@ describe("tryAgent", () => {
     });
     await tryAgent(t.id, [{ role: "assistant", text: "Hola" }, { role: "user", text: "¿Precio?" }], { model });
     expect(model.doGenerateCalls[0].prompt.filter((m) => m.role !== "system")[0].role).toBe("user");
+  });
+
+  it("only describes what it would ask the admin, without creating escalations", async () => {
+    const t = await makeTenant();
+    await saveAgentConfig(t.id, { agentName: "Sofi", provider: "anthropic", model: "m", apiKey: "sk-1234" }, async () => "valid");
+    const model = new MockLanguageModelV4({
+      doGenerate: [
+        {
+          content: [{ type: "tool-call", toolCallId: "a1", toolName: "ask_admin", input: JSON.stringify({ question: "¿Abren el domingo?", is_price: false }) }],
+          finishReason: { unified: "tool-calls", raw: undefined },
+          usage,
+          warnings: [],
+        },
+        { content: [{ type: "text", text: "Lo consulto" }], finishReason: { unified: "stop", raw: undefined }, usage, warnings: [] },
+      ],
+    });
+    const r = await tryAgent(t.id, [{ role: "user", text: "¿Abren el domingo?" }], { model });
+    expect(r).toMatchObject({ success: true, data: { adminNote: "(el bot consultaría al admin: ¿Abren el domingo?)" } });
+    expect(await ownerSql`select 1 from escalations where tenant_id = ${t.id}`).toHaveLength(0);
   });
 
   it("rejects an oversized history", async () => {

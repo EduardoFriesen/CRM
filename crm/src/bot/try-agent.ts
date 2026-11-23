@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getAgentRuntime } from "@/agent/config";
 import { createModel, isAuthError } from "@/agent/model";
 import { getDb } from "@/db/client";
+import { recentFacts } from "@/facts/facts";
 import { tenants, type Stage } from "@/db/schema";
 import { fail, ok, type Result } from "@/lib/result";
 import { buildSystemPrompt } from "./prompt";
@@ -23,7 +24,7 @@ export async function tryAgent(
   tenantId: string,
   history: unknown,
   deps: { model?: LanguageModel } = {},
-): Promise<Result<{ reply: string; stage: Stage | null }>> {
+): Promise<Result<{ reply: string; stage: Stage | null; adminNote: string | null }>> {
   const parsed = historyInput.safeParse(history);
   if (!parsed.success) return fail("VALIDATION", "Conversación de prueba inválida");
   const rt = await getAgentRuntime(tenantId);
@@ -31,7 +32,9 @@ export async function tryAgent(
 
   const [tenant] = await getDb().select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
   let stage: Stage | null = null;
-  const system = buildSystemPrompt({ ...rt, tenantName: tenant?.name ?? "", introduce: rt.discloseAi && parsed.data.length === 1, now: new Date() });
+  let adminNote: string | null = null;
+  const facts = await recentFacts(tenantId);
+  const system = buildSystemPrompt({ ...rt, tenantName: tenant?.name ?? "", introduce: rt.discloseAi && parsed.data.length === 1, now: new Date(), facts });
   try {
     const model = deps.model ?? (await createModel(rt));
     const reply = await generateAgentText(model, {
@@ -40,9 +43,14 @@ export async function tryAgent(
       messages: parsed.data
         .slice(Math.max(0, parsed.data.findIndex((m) => m.role === "user")))
         .map((m) => ({ role: m.role, content: m.text })),
-      tools: makeTools(tenantId, "", { dryRun: true, onStage: (s) => (stage = s) }),
+      tools: makeTools(tenantId, "", {
+        dryRun: true,
+        onStage: (s) => (stage = s),
+        onAdmin: (kind, text) =>
+          (adminNote = kind === "ask" ? `(el bot consultaría al admin: ${text})` : "(el bot pasaría la charla a alguien del equipo)"),
+      }),
     });
-    return ok({ reply: truncateForWhatsApp(reply.trim()), stage });
+    return ok({ reply: truncateForWhatsApp(reply.trim()), stage, adminNote });
   } catch (e) {
     if (isAuthError(e)) return fail("KEY_INVALID", "El proveedor rechazó la API key");
     return fail("MODEL_ERROR", "El modelo no respondió. Probá de nuevo en unos segundos.");
