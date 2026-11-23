@@ -55,7 +55,7 @@ describe("createOrder", () => {
     const c = await buyer(t.id);
     expect(await createOrder(t.id, input(c, [{ productId: pan, quantity: 2 }, { productId: med, quantity: 1 }]))).toEqual({
       success: false,
-      error: { code: "OUT_OF_STOCK", message: "No hay stock suficiente de Medialunas (quedan 0)" },
+      error: { code: "OUT_OF_STOCK", message: "No hay stock suficiente de Medialunas (quedan 0)", details: { productId: med } },
     });
     expect(await stockOf(pan)).toBe(10);
     expect(await listOrders(t.id, { closed: false })).toEqual([]);

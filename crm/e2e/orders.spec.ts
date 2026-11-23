@@ -41,6 +41,8 @@ test("an order that exceeds the stock is refused and keeps what was typed", asyn
   await dialog.getByLabel("Dirección").fill("Av. Siempre Viva 742");
   await dialog.getByRole("button", { name: "Guardar pedido" }).click();
   await expect(dialog.getByText("No hay stock suficiente de Pan de campo (quedan 10)")).toBeVisible();
+  await expect(dialog.getByLabel("Cantidad 1")).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByLabel("Cantidad 1")).toHaveAccessibleDescription(/No hay stock suficiente de Pan de campo/);
   await expect(dialog.getByLabel("Dirección")).toHaveValue("Av. Siempre Viva 742");
   expect(await stock()).toBe(10);
 });

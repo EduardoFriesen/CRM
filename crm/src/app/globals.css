@@ -873,6 +873,10 @@ button.danger:hover:not(:disabled) {
   font-weight: 600;
   font-size: var(--text-sm);
 }
+.order-line-wrap {
+  display: grid;
+  gap: 2px;
+}
 .order-line {
   display: flex;
   gap: var(--space-2);

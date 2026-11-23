@@ -25,7 +25,11 @@ export const orderInput = z.object({
 });
 
 class OutOfStock extends Error {
-  constructor(readonly productName: string, readonly left: number) {
+  constructor(
+    readonly productId: string,
+    readonly productName: string,
+    readonly left: number,
+  ) {
     super("out of stock");
   }
 }
@@ -98,7 +102,7 @@ export async function createOrder(tenantId: string, input: unknown): Promise<Res
           .returning({ id: products.id });
         if (taken.length === 0) {
           const [now] = await tx.select({ stock: products.stock }).from(products).where(eq(products.id, p.id));
-          throw new OutOfStock(p.name, now?.stock ?? 0);
+          throw new OutOfStock(p.id, p.name, now?.stock ?? 0);
         }
       }
 
@@ -131,7 +135,9 @@ export async function createOrder(tenantId: string, input: unknown): Promise<Res
       return ok(view);
     });
   } catch (e) {
-    if (e instanceof OutOfStock) return fail("OUT_OF_STOCK", `No hay stock suficiente de ${e.productName} (quedan ${e.left})`);
+    if (e instanceof OutOfStock) {
+      return fail("OUT_OF_STOCK", `No hay stock suficiente de ${e.productName} (quedan ${e.left})`, { productId: e.productId });
+    }
     throw e;
   }
 }
