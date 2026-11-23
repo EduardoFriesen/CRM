@@ -19,6 +19,7 @@ worker.on("failed", (job, err) => {
   console.error(`reply job=${job?.id} attempt=${job?.attemptsMade} failed: ${errorCode(err)}`);
 });
 worker.on("ready", () => console.log("crm-worker ready"));
+worker.on("error", (err) => console.error(`crm-worker error: ${errorCode(err)}`));
 
 const shutdown = async () => {
   await worker.close();
