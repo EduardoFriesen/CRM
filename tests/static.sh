@@ -26,4 +26,11 @@ check "evolution history/telemetry env forced to false" bash -c '
    .services[\"evolution-api\"].environment
    | .DATABASE_SAVE_DATA_HISTORIC==\"false\" and .DATABASE_SAVE_MESSAGE_UPDATE==\"false\" and .TELEMETRY_ENABLED==\"false\""' _ "$tmp/env"
 check "no FLOWISE_ vars left" bash -c '! grep -q FLOWISE_ .env.example docker-compose.yml'
+check "crm-migrate runs once and crm waits for it" bash -c '
+  docker compose --env-file "$1" config --format json | jq -e "
+   .services[\"crm-migrate\"].restart==\"no\"
+   and .services.crm.depends_on[\"crm-migrate\"].condition==\"service_completed_successfully\""' _ "$tmp/env"
+check "owner db url only in crm-migrate" bash -c '
+  docker compose --env-file "$1" config --format json | jq -e "
+   [.services|to_entries[]|select(.value.environment.DATABASE_OWNER_URL)|.key]==[\"crm-migrate\"]"' _ "$tmp/env"
 exit $fail

@@ -62,10 +62,33 @@ services:
         max-file: "3"
     networks: [backend]
 
+  crm-migrate:
+    build: { context: ./crm, target: migrator }
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_OWNER_URL: postgresql://crm:${CRM_DB_PASSWORD:?missing CRM_DB_PASSWORD}@postgres:5432/crm
+    networks: [backend]
+
+  crm:
+    build: { context: ./crm, target: runner }
+    restart: unless-stopped
+    depends_on:
+      crm-migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://crm_app:${CRM_APP_DB_PASSWORD:?missing CRM_APP_DB_PASSWORD}@postgres:5432/crm
+      EVOLUTION_URL: http://evolution-api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:?missing EVOLUTION_API_KEY}
+      CRM_INTERNAL_URL: http://crm:3000
+    networks: [backend]
+
   nginx:
     image: nginx:1.30.7-alpine
     restart: unless-stopped
-    depends_on: [evolution-api]
+    depends_on: [evolution-api, crm]
     ports:
       - "127.0.0.1:${HTTP_PORT:-8080}:80"
     volumes:

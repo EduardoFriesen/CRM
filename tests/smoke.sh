@@ -13,7 +13,7 @@ poll() { local d=$1 t=$2; shift 2; local e=$((SECONDS+t)); until "$@" >/dev/null
 
 docker compose up -d >/dev/null 2>&1 || { echo "FAIL compose up"; exit 1; }
 
-for s in nginx evolution-api postgres redis; do
+for s in nginx evolution-api crm postgres redis; do
   poll "$s running" 60 bash -c "[ \"\$(docker compose ps --format '{{.State}}' $s)\" = running ]"
 done
 for s in postgres redis; do
@@ -32,6 +32,12 @@ echo "$h" | grep -i '^server:' | grep -qE '[0-9]' && bad "Server header has no v
 
 c=$(code -H 'Host: flowise.localhost' $B/)
 { [ "$c" = 444 ] || [ "$c" = 000 ]; } && ok "flowise host gone ($c)" || bad "flowise host gone" "$c"
+
+poll "crm health 200" 120 bash -c "[ \"\$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: crm.localhost' $B/api/health)\" = 200 ]"
+c=$(code -X POST -H 'Host: crm.localhost' $B/api/webhooks/evolution/x)
+[ "$c" = 404 ] && ok "crm webhook not public" || bad "crm webhook not public" "$c"
+curl -si --max-time 5 -H 'Host: crm.localhost' $B/api/health | grep -i '^content-security-policy:' | grep -q "frame-ancestors 'none'" \
+  && ok "crm CSP frame-ancestors none" || bad "crm CSP frame-ancestors none" missing
 
 c=$(code -H 'Host: foo.localhost' $B/)
 { [ "$c" = 444 ] || [ "$c" = 000 ]; } && ok "unknown host dropped ($c)" || bad "unknown host dropped" "$c"
