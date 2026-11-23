@@ -64,3 +64,33 @@ describe("setContactStage", () => {
     expect(await setContactStage(t.id, "not-a-uuid", "venta")).toMatchObject({ success: false, error: { code: "VALIDATION" } });
   });
 });
+
+describe("postventa needs a delivered order", () => {
+  const withOrder = async (tenantId: string, contactId: string, status: string) => {
+    await ownerSql`insert into orders (tenant_id, contact_id, status, delivery_date, address, total)
+      values (${tenantId}, ${contactId}, ${status}, current_date, 'Calle 1', 100)`;
+  };
+
+  it("refuses postventa without a delivered order", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    expect(await setContactStage(t.id, c.id, "postventa")).toEqual({
+      success: false,
+      error: { code: "NEEDS_DELIVERED_ORDER", message: "Para pasar a Postventa el cliente necesita un pedido entregado" },
+    });
+    await withOrder(t.id, c.id, "cancelled");
+    expect(await setContactStage(t.id, c.id, "postventa")).toMatchObject({ error: { code: "NEEDS_DELIVERED_ORDER" } });
+    await withOrder(t.id, c.id, "delivered");
+    expect(await setContactStage(t.id, c.id, "postventa")).toMatchObject({ success: true });
+  });
+
+  it("tells the board who already has a delivered order", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id, { name: "Con pedido" });
+    await makeContact(t.id, { name: "Sin pedido" });
+    await withOrder(t.id, c.id, "delivered");
+    const board = await listBoard(t.id);
+    const all = [...board.consulta, ...board.venta, ...board.postventa];
+    expect(Object.fromEntries(all.map((x) => [x.name, x.hasDeliveredOrder]))).toEqual({ "Con pedido": true, "Sin pedido": false });
+  });
+});

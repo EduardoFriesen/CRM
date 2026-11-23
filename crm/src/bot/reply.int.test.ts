@@ -233,6 +233,15 @@ describe("runConversation", () => {
     expect((await getAgentView(t.id))?.lastErrorCode).toBe("HTTP_404");
   });
 
+  it("cannot move a customer to postventa without a delivered order", async () => {
+    const { t, c } = await setup();
+    await say(t.id, c.id, "customer", "Ya me llegó todo, gracias");
+    const model = new MockLanguageModelV4({ doGenerate: [stageCall("postventa"), text("¡Qué bueno!")] });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    const [row] = await ownerSql<{ stage: string }[]>`select stage from contacts where id = ${c.id}`;
+    expect(row.stage).toBe("consulta");
+  });
+
   describe("2b: admin questions, handoff and pause", () => {
     it("asks the admin, records the escalation, schedules a reminder and answers the customer", async () => {
       const { t, c } = await setup();

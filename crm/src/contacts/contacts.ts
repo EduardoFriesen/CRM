@@ -11,6 +11,7 @@ export type BoardContact = {
   lastMessageAt: Date | null;
   lastMessage: string | null;
   botPausedUntil: Date | null;
+  hasDeliveredOrder: boolean;
 };
 export type Board = Record<Stage, BoardContact[]>;
 
@@ -24,6 +25,8 @@ export async function listBoard(tenantId: string): Promise<Board> {
         stage: contacts.stage,
         lastMessageAt: contacts.lastMessageAt,
         botPausedUntil: contacts.botPausedUntil,
+        hasDeliveredOrder: sql<boolean>`exists (
+          select 1 from orders o where o.contact_id = "contacts"."id" and o.status = 'delivered')`,
         // Columns are qualified by hand: drizzle renders bare names inside sql``, and an
         // unqualified "id" in this subquery would resolve to messages.id.
         lastMessage: sql<string | null>`(
@@ -48,6 +51,15 @@ export async function setContactStage(
 ): Promise<Result<{ id: string; stage: Stage }>> {
   const parsed = stageChange.safeParse({ contactId, stage });
   if (!parsed.success) return fail("VALIDATION", "Etapa inválida", z.flattenError(parsed.error).fieldErrors);
+  if (parsed.data.stage === "postventa") {
+    // Postventa means the customer received an order (also enforced for the bot's set_stage).
+    const [delivered] = await withTenant(tenantId, (tx) =>
+      tx.execute(sql`select 1 from orders where contact_id = ${parsed.data.contactId} and status = 'delivered' limit 1`),
+    );
+    if (!delivered) {
+      return fail("NEEDS_DELIVERED_ORDER", "Para pasar a Postventa el cliente necesita un pedido entregado");
+    }
+  }
   const [row] = await withTenant(tenantId, (tx) =>
     tx
       .update(contacts)
