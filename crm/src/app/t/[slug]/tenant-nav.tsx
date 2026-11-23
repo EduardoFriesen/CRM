@@ -7,6 +7,8 @@ export function TenantNav({ slug }: { slug: string }) {
   const path = usePathname();
   const links = [
     { href: `/t/${slug}`, label: "Clientes" },
+    { href: `/t/${slug}/catalogo`, label: "Catálogo" },
+    { href: `/t/${slug}/agente`, label: "Agente" },
     { href: `/t/${slug}/whatsapp`, label: "WhatsApp" },
   ];
   return (
