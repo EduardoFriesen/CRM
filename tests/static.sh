@@ -47,4 +47,8 @@ check "crm-worker: no ports, owner url absent, encryption key and redis db 2" ba
 check "crm app has redis db 2 and the encryption key" bash -c '
   docker compose --env-file "$1" config --format json | jq -e "
    .services.crm.environment | (.REDIS_URL | endswith(\"/2\")) and (.CRM_ENCRYPTION_KEY | length > 0)"' _ "$tmp/env"
+check "OLLAMA_URL only in the dev override" bash -c '
+  docker compose --env-file "$1" config --format json | jq -e "[.services.crm, .services[\"crm-worker\"]] | all(.environment.OLLAMA_URL == null)" &&
+  docker compose --env-file "$1" -f docker-compose.yml -f docker-compose.dev.yml config --format json |
+    jq -e "[.services.crm, .services[\"crm-worker\"]] | all(.environment.OLLAMA_URL | startswith(\"http://10.0.2.2:\"))"' _ "$tmp/env"
 exit $fail

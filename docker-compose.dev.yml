@@ -7,3 +7,11 @@ services:
   redis:
     ports:
       - "127.0.0.1:56379:6379"
+  # Local Ollama on the host (rootless Docker sees the host's 127.0.0.1 as 10.0.2.2 once
+  # host loopback is enabled). Never set this in docker-compose.yml: production has no Ollama.
+  crm:
+    environment:
+      OLLAMA_URL: http://10.0.2.2:11434/v1
+  crm-worker:
+    environment:
+      OLLAMA_URL: http://10.0.2.2:11434/v1

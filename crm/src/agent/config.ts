@@ -6,7 +6,10 @@ import { agentConfigs, tenants, PROVIDERS, type AgentConfigRow, type KeyStatus, 
 import { fail, ok, type Result } from "@/lib/result";
 import { recordUsage } from "@/usage/usage";
 import { assertSafeBaseUrl, UnsafeBaseUrlError } from "./base-url";
-import { verifyKeyDetailed, type KeyCheck, type KeyCheckResult, type ModelSettings } from "./model";
+import { ollamaUrl, verifyKeyDetailed, type KeyCheck, type KeyCheckResult, type ModelSettings } from "./model";
+
+// Placeholder stored for Ollama, which has no key (api_key_enc is required).
+const LOCAL_KEY = "local";
 
 export type AgentView = {
   agentName: string;
@@ -141,8 +144,15 @@ export async function saveAgentConfig(
     }
   }
 
+  const local = data.provider === "ollama";
+  if (local && !ollamaUrl()) {
+    return fail("VALIDATION", "Revisá la configuración del agente", { provider: ["Ollama no está disponible en este servidor"] });
+  }
+
   const existing = await load(tenantId);
-  const apiKey = newKey || (existing ? decrypt(existing.apiKeyEnc) : "");
+  // Ollama needs no key; its stored placeholder must never pass as a cloud provider's key.
+  const storedKey = existing && existing.provider !== "ollama" ? decrypt(existing.apiKeyEnc) : "";
+  const apiKey = local ? LOCAL_KEY : newKey || storedKey;
   if (!apiKey) return fail("VALIDATION", "Revisá la configuración del agente", { apiKey: ["Cargá la API key"] });
 
   const settings: ModelSettings = { provider: data.provider, model: data.model, apiKey, baseUrl };
@@ -171,7 +181,7 @@ export async function saveAgentConfig(
     ...data,
     baseUrl,
     apiKeyEnc: encrypt(apiKey),
-    apiKeyLast4: apiKey.slice(-4),
+    apiKeyLast4: local ? "" : apiKey.slice(-4),
     keyStatus,
     ...lastError,
     updatedAt: sql`now()`,

@@ -14,6 +14,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   google: "Google (Gemini)",
   openai: "OpenAI",
   "openai-compatible": "Compatible con OpenAI (OpenRouter, Groq…)",
+  ollama: "Ollama (local, solo desarrollo)",
 };
 
 const KEY_STATUS: Record<AgentView["keyStatus"], { text: string; tone: string }> = {
@@ -41,11 +42,13 @@ export function AgentForm({
   slug,
   view,
   suggestions,
+  providers,
   adminPhone,
 }: {
   slug: string;
   view: AgentView | null;
   suggestions: Record<Provider, string[]>;
+  providers: Provider[];
   adminPhone: string;
 }) {
   const [state, action, saving] = useActionState<AgentFormState, FormData>(
@@ -68,9 +71,9 @@ export function AgentForm({
         <div className="field">
           <label htmlFor="provider">Proveedor</label>
           <select id="provider" name="provider" defaultValue={values.provider} onChange={(e) => setProvider(e.currentTarget.value)}>
-            {Object.entries(PROVIDER_LABELS).map(([v, label]) => (
+            {providers.map((v) => (
               <option key={v} value={v}>
-                {label}
+                {PROVIDER_LABELS[v]}
               </option>
             ))}
           </select>
@@ -84,22 +87,26 @@ export function AgentForm({
         {provider === "openai-compatible" && (
           <Field name="baseUrl" label="URL base" errors={errors} defaultValue={values.baseUrl} hint="https:// y pública. Ej. https://openrouter.ai/api/v1" />
         )}
-        <div className="field">
-          <label htmlFor="apiKey">API key</label>
-          <input
-            id="apiKey"
-            name="apiKey"
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder={current ? "Dejala vacía para conservar la actual" : ""}
-            aria-invalid={errors.apiKey ? true : undefined}
-            aria-describedby="apiKey-hint"
-          />
-          <small id="apiKey-hint" className={errors.apiKey ? "error" : undefined}>
-            {errors.apiKey?.[0] ?? (current ? <>Guardada: <span className="mono">••••{current.apiKeyLast4}</span></> : "Se guarda cifrada y nunca se vuelve a mostrar.")}
-          </small>
-        </div>
+        {provider === "ollama" ? (
+          <p className="meta">Sin API key: usa el Ollama de esta máquina.</p>
+        ) : (
+          <div className="field">
+            <label htmlFor="apiKey">API key</label>
+            <input
+              id="apiKey"
+              name="apiKey"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={current ? "Dejala vacía para conservar la actual" : ""}
+              aria-invalid={errors.apiKey ? true : undefined}
+              aria-describedby="apiKey-hint"
+            />
+            <small id="apiKey-hint" className={errors.apiKey ? "error" : undefined}>
+              {errors.apiKey?.[0] ?? (current?.apiKeyLast4 ? <>Guardada: <span className="mono">••••{current.apiKeyLast4}</span></> : "Se guarda cifrada y nunca se vuelve a mostrar.")}
+            </small>
+          </div>
+        )}
         {status && (
           <p className={`key-status ${status.tone}`} role="status">
             {status.text}

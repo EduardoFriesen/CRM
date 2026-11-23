@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { getAgentRuntime, getAgentView, isBotActive, markKeyInvalid, saveAgentConfig } from "@/agent/config";
 import { withTenant } from "@/db/client";
 import { agentConfigs } from "@/db/schema";
@@ -134,6 +134,46 @@ describe("agent config", () => {
     });
     expect(await saveAgentConfig(t.id, { ...base, apiKey: "", dailyRequestLimit: "mil" }, valid)).toMatchObject({
       error: { code: "VALIDATION", details: { dailyRequestLimit: ["Escribí solo números (ej. 1000)"] } },
+    });
+  });
+
+  describe("ollama (development only)", () => {
+    afterEach(() => vi.unstubAllEnvs());
+    const local = { ...base, provider: "ollama", model: "qwen3:8b", apiKey: "" };
+
+    it("is refused when the server has no Ollama", async () => {
+      vi.stubEnv("OLLAMA_URL", "");
+      const t = await makeTenant();
+      expect(await saveAgentConfig(t.id, local, valid)).toMatchObject({
+        success: false,
+        error: { code: "VALIDATION", details: { provider: ["Ollama no está disponible en este servidor"] } },
+      });
+      expect(await ownerSql`select 1 from agent_configs where tenant_id = ${t.id}`).toHaveLength(0);
+    });
+
+    it("needs no key and ignores a tenant-supplied URL", async () => {
+      vi.stubEnv("OLLAMA_URL", "http://127.0.0.1:11434/v1");
+      const t = await makeTenant();
+      expect(await saveAgentConfig(t.id, { ...local, baseUrl: "http://evil.example" }, valid)).toMatchObject({
+        success: true,
+        data: { provider: "ollama", baseUrl: null, apiKeyLast4: "" },
+      });
+    });
+
+    it("saves as unverified when Ollama is down", async () => {
+      vi.stubEnv("OLLAMA_URL", "http://127.0.0.1:9/v1");
+      const t = await makeTenant();
+      expect(await saveAgentConfig(t.id, local)).toMatchObject({ success: true, data: { keyStatus: "unverified" } });
+    });
+
+    it("asks for a real key when moving back to a cloud provider", async () => {
+      vi.stubEnv("OLLAMA_URL", "http://127.0.0.1:11434/v1");
+      const t = await makeTenant();
+      await saveAgentConfig(t.id, local, valid);
+      expect(await saveAgentConfig(t.id, { ...base, provider: "google", model: "gemini-3.5-flash", apiKey: "" }, valid)).toMatchObject({
+        success: false,
+        error: { details: { apiKey: ["Cargá la API key"] } },
+      });
     });
   });
 });

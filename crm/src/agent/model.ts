@@ -3,7 +3,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { APICallError, generateText, RetryError, type LanguageModel } from "ai";
-import type { KeyStatus, Provider } from "@/db/schema";
+import { PROVIDERS, type KeyStatus, type Provider } from "@/db/schema";
 import { assertSafeBaseUrl, safeFetch } from "./base-url";
 
 export type ModelSettings = { provider: Provider; model: string; apiKey: string; baseUrl: string | null };
@@ -15,7 +15,14 @@ export const MODEL_SUGGESTIONS: Record<Provider, string[]> = {
   google: ["gemini-3.5-flash", "gemini-3.5-flash-lite"],
   openai: ["gpt-4.1-mini", "gpt-4.1"],
   "openai-compatible": [],
+  ollama: ["qwen3:8b", "llama3.1:8b"],
 };
+
+// Local Ollama exists only where the server sets OLLAMA_URL (the dev compose override).
+// The URL is the server's, never the tenant's, so it may point at a private address.
+export const ollamaUrl = (): string | null => process.env.OLLAMA_URL || null;
+
+export const availableProviders = (): Provider[] => PROVIDERS.filter((p) => p !== "ollama" || ollamaUrl() !== null);
 
 async function fakeModel(): Promise<LanguageModel> {
   const { MockLanguageModelV4 } = await import("ai/test");
@@ -45,6 +52,11 @@ export const createModel: ModelFactory = async (s) => {
     case "openai-compatible": {
       const url = await assertSafeBaseUrl(s.baseUrl ?? "");
       return createOpenAICompatible({ name: "custom", baseURL: url.toString(), apiKey: s.apiKey, fetch: safeFetch })(s.model);
+    }
+    case "ollama": {
+      const baseURL = ollamaUrl();
+      if (!baseURL) throw new Error("OLLAMA_UNAVAILABLE");
+      return createOpenAICompatible({ name: "ollama", baseURL })(s.model);
     }
   }
 };
