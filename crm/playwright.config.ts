@@ -14,6 +14,7 @@ export default defineConfig({
     command: `npx next dev -p ${port}`,
     url: `http://localhost:${port}/api/health`,
     reuseExistingServer: false,
-    env: { DATABASE_URL: testAppUrl },
+    // Test-only: fake LLM (ignored in production) and a throwaway master key.
+    env: { DATABASE_URL: testAppUrl, CRM_FAKE_MODEL: "1", CRM_ENCRYPTION_KEY: "0f".repeat(32) },
   },
 });

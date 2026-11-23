@@ -588,6 +588,52 @@ button.danger:hover:not(:disabled) {
   font-size: var(--text-sm);
 }
 
+/* Agent ------------------------------------------------------------------ */
+
+.agent-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (min-width: 1100px) {
+  .agent-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  }
+}
+.agent-form {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 720px;
+}
+.agent-form .field input,
+.agent-form .field select,
+.agent-form .field textarea {
+  width: 100%;
+}
+.key-status {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+}
+.key-status.ok {
+  background: var(--panel);
+  color: var(--primary);
+}
+.key-status.warn {
+  background: var(--warning-bg);
+  color: var(--warning-ink);
+}
+.key-status.bad {
+  background: var(--warning-bg);
+  color: var(--danger);
+  font-weight: 600;
+}
+.meta-note {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
 /* Loading + WhatsApp ----------------------------------------------------- */
 
 .skeleton {
