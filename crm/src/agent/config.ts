@@ -5,7 +5,7 @@ import { withTenant } from "@/db/client";
 import { agentConfigs, tenants, PROVIDERS, type AgentConfigRow, type KeyStatus, type Provider } from "@/db/schema";
 import { fail, ok, type Result } from "@/lib/result";
 import { assertSafeBaseUrl, UnsafeBaseUrlError } from "./base-url";
-import { verifyKey, type ModelSettings } from "./model";
+import { verifyKey, type KeyCheck, type ModelSettings } from "./model";
 
 export type AgentView = {
   agentName: string;
@@ -101,7 +101,7 @@ export async function isBotActive(tenantId: string): Promise<boolean> {
 export async function saveAgentConfig(
   tenantId: string,
   input: unknown,
-  verify: (s: ModelSettings) => Promise<KeyStatus> = verifyKey,
+  verify: (s: ModelSettings) => Promise<KeyCheck> = verifyKey,
 ): Promise<Result<AgentView>> {
   const parsed = agentInput.safeParse(input);
   if (!parsed.success) {
@@ -126,8 +126,16 @@ export async function saveAgentConfig(
   const settings: ModelSettings = { provider: data.provider, model: data.model, apiKey, baseUrl };
   const unchanged =
     !newKey && existing?.provider === data.provider && existing.model === data.model && existing.baseUrl === baseUrl;
-  const keyStatus = unchanged ? existing.keyStatus : await verify(settings);
-  if (keyStatus === "invalid" && !unchanged) return fail("KEY_INVALID", "El proveedor rechazó la API key");
+  const check: KeyCheck = unchanged ? existing.keyStatus : await verify(settings);
+  if (check === "invalid" && !unchanged) return fail("KEY_INVALID", "El proveedor rechazó la API key");
+  const keyStatus: KeyStatus = check === "quota" ? "valid" : check;
+  // A fresh check replaces the last error: quota exhausted is flagged, a clean pass clears it.
+  const lastError =
+    unchanged || check === "unverified"
+      ? {}
+      : check === "quota"
+        ? { lastErrorCode: "QUOTA_EXCEEDED", lastErrorAt: sql`now()` }
+        : { lastErrorCode: null, lastErrorAt: null };
 
   const values = {
     ...data,
@@ -135,6 +143,7 @@ export async function saveAgentConfig(
     apiKeyEnc: encrypt(apiKey),
     apiKeyLast4: apiKey.slice(-4),
     keyStatus,
+    ...lastError,
     updatedAt: sql`now()`,
   };
   const [row] = await withTenant(tenantId, async (tx) => {

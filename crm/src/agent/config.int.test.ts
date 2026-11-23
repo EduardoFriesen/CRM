@@ -91,4 +91,21 @@ describe("agent config", () => {
     expect(await isBotActive(t.id)).toBe(false);
     expect((await getAgentView(t.id))?.keyStatus).toBe("invalid");
   });
+
+  it("saves a key whose quota is exhausted as valid, flagging the quota", async () => {
+    const t = await makeTenant();
+    expect(await saveAgentConfig(t.id, base, async () => "quota")).toMatchObject({
+      success: true,
+      data: { keyStatus: "valid", lastErrorCode: "QUOTA_EXCEEDED" },
+    });
+  });
+
+  it("clears the last error once a key verifies fine", async () => {
+    const t = await makeTenant();
+    await saveAgentConfig(t.id, base, valid);
+    await ownerSql`update agent_configs set last_error_code = 'HTTP_429', last_error_at = now() where tenant_id = ${t.id}`;
+    expect(await saveAgentConfig(t.id, { ...base, apiKey: "sk-otra-5678" }, valid)).toMatchObject({
+      data: { lastErrorCode: null, lastErrorAt: null },
+    });
+  });
 });

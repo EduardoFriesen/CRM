@@ -28,6 +28,17 @@ describe("verifyKey", () => {
     expect(await verifyKey({ ...settings, provider: "google" }, failing(e))).toBe("invalid");
   });
 
+  it("reports an exhausted daily quota separately (the key itself was accepted)", async () => {
+    const e = new APICallError({
+      message: "You exceeded your current quota",
+      url: "https://generativelanguage.googleapis.com",
+      requestBodyValues: {},
+      statusCode: 429,
+      responseBody: '{"error":{"status":"RESOURCE_EXHAUSTED","details":[{"violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}',
+    });
+    expect(await verifyKey({ ...settings, provider: "google" }, failing(e))).toBe("quota");
+  });
+
   it("reports unverified on network errors", async () => {
     expect(await verifyKey(settings, failing(new TypeError("fetch failed")))).toBe("unverified");
   });

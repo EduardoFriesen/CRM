@@ -2,7 +2,8 @@ import type { LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getAgentRuntime } from "@/agent/config";
-import { createModel, isAuthError } from "@/agent/model";
+import { describeAgentError } from "@/agent/errors";
+import { createModel, isAuthError, isQuotaExhausted } from "@/agent/model";
 import { getDb } from "@/db/client";
 import { recentFacts } from "@/facts/facts";
 import { tenants, type Stage } from "@/db/schema";
@@ -53,6 +54,7 @@ export async function tryAgent(
     return ok({ reply: truncateForWhatsApp(reply.trim()), stage, adminNote });
   } catch (e) {
     if (isAuthError(e)) return fail("KEY_INVALID", "El proveedor rechazó la API key");
+    if (isQuotaExhausted(e)) return fail("QUOTA_EXCEEDED", describeAgentError("QUOTA_EXCEEDED"));
     return fail("MODEL_ERROR", "El modelo no respondió. Probá de nuevo en unos segundos.");
   }
 }

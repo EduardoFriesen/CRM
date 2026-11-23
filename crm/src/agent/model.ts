@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { APICallError, generateText, type LanguageModel } from "ai";
+import { APICallError, generateText, RetryError, type LanguageModel } from "ai";
 import type { KeyStatus, Provider } from "@/db/schema";
 import { assertSafeBaseUrl, safeFetch } from "./base-url";
 
@@ -12,7 +12,7 @@ export type ModelFactory = (s: ModelSettings) => Promise<LanguageModel>;
 // Suggestions only: the field is free text. Check each provider's docs for current model ids.
 export const MODEL_SUGGESTIONS: Record<Provider, string[]> = {
   anthropic: ["claude-sonnet-5-5", "claude-haiku-5-5"],
-  google: ["gemini-2.5-flash", "gemini-2.5-pro"],
+  google: ["gemini-3.5-flash", "gemini-3.5-flash-lite"],
   openai: ["gpt-4.1-mini", "gpt-4.1"],
   "openai-compatible": [],
 };
@@ -56,11 +56,30 @@ export const isAuthError = (e: unknown): boolean =>
     e.statusCode === 403 ||
     (e.statusCode === 400 && /API_KEY_INVALID|API key not valid/i.test(`${e.responseBody ?? ""} ${e.message}`)));
 
-export async function verifyKey(s: ModelSettings, build: ModelFactory = createModel): Promise<KeyStatus> {
+const unwrap = (e: unknown): unknown => (RetryError.isInstance(e) ? e.lastError : e);
+
+// A 429 that won't clear in minutes: a daily quota (Gemini free tier) or no credit left
+// (OpenAI insufficient_quota). Retrying only burns more of it.
+export function isQuotaExhausted(e: unknown): boolean {
+  const err = unwrap(e);
+  return (
+    APICallError.isInstance(err) &&
+    err.statusCode === 429 &&
+    /PerDay|insufficient_quota/i.test(`${err.responseBody ?? ""} ${err.message}`)
+  );
+}
+
+// "quota": the provider accepted the key but refused on usage limits.
+export type KeyCheck = KeyStatus | "quota";
+
+export async function verifyKey(s: ModelSettings, build: ModelFactory = createModel): Promise<KeyCheck> {
   try {
     await generateText({ model: await build(s), prompt: "ping", maxOutputTokens: 1, maxRetries: 0 });
     return "valid";
   } catch (e) {
-    return isAuthError(e) ? "invalid" : "unverified";
+    const err = unwrap(e);
+    if (isAuthError(err)) return "invalid";
+    if (APICallError.isInstance(err) && err.statusCode === 429) return "quota";
+    return "unverified";
   }
 }

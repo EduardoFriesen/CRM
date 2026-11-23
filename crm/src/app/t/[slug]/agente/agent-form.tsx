@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import type { AgentView } from "@/agent/config";
 import type { Provider } from "@/db/schema";
+import { describeAgentError } from "@/agent/errors";
 import { relativeTime } from "@/lib/time";
 import { saveAgentAction, type AgentFormState, type AgentFormValues } from "./actions";
 
@@ -104,7 +105,7 @@ export function AgentForm({
         )}
         {current?.lastErrorCode && (
           <p className="key-status warn">
-            Último error del bot: <span className="mono">{current.lastErrorCode}</span>{" "}
+            {describeAgentError(current.lastErrorCode)}{" "}
             ({relativeTime(current.lastErrorAt ? new Date(current.lastErrorAt) : null)})
           </p>
         )}

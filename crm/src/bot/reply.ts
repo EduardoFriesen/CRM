@@ -1,7 +1,7 @@
 import { APICallError, generateText, isStepCount, RetryError, type LanguageModel, type ModelMessage, type ToolSet } from "ai";
 import { and, desc, eq, gt, max, sql } from "drizzle-orm";
 import { getAgentRuntime, markKeyInvalid, recordAgentError } from "@/agent/config";
-import { createModel, isAuthError } from "@/agent/model";
+import { createModel, isAuthError, isQuotaExhausted } from "@/agent/model";
 import { withTenant } from "@/db/client";
 import { contacts, escalations, messages, tenants, whatsappInstances } from "@/db/schema";
 import { EvolutionError, sendText } from "@/whatsapp/evolution";
@@ -26,7 +26,8 @@ export type ConversationOutcome =
   | "skipped:empty"
   | "skipped:model-error"
   | "skipped:paused"
-  | "skipped:not-answered";
+  | "skipped:not-answered"
+  | "skipped:quota";
 
 // Cuts at the last sentence end (". ") or line break before the limit. A bare "." is not
 // a boundary: es-AR prices use it for thousands ("$12.500").
@@ -41,7 +42,9 @@ export async function generateAgentText(
   model: LanguageModel,
   args: { system: string; messages: ModelMessage[]; tools: ToolSet },
 ): Promise<string> {
-  const result = await generateText({ model, ...args, stopWhen: isStepCount(4), maxRetries: 1 });
+  // No SDK-level retries: BullMQ retries transient failures, and retrying a 429 here would
+  // only spend more of the provider quota.
+  const result = await generateText({ model, ...args, stopWhen: isStepCount(4), maxRetries: 0 });
   return result.text;
 }
 
@@ -109,10 +112,14 @@ async function generateOrRecord(
   rt: { pauseHours: number } & Parameters<typeof createModel>[0],
   model: LanguageModel | undefined,
   args: Parameters<typeof generateAgentText>[1],
-): Promise<string | "skipped:key-invalid" | "skipped:model-error"> {
+): Promise<string | "skipped:key-invalid" | "skipped:model-error" | "skipped:quota"> {
   try {
     return await generateAgentText(model ?? (await createModel(rt)), args);
   } catch (e) {
+    if (isQuotaExhausted(e)) {
+      await recordAgentError(tenantId, "QUOTA_EXCEEDED");
+      return "skipped:quota";
+    }
     await recordAgentError(tenantId, errorCode(e));
     if (isAuthError(e)) {
       await markKeyInvalid(tenantId);
@@ -178,7 +185,7 @@ export async function runConversation(
       pauseHours: rt.pauseHours,
     }),
   });
-  if (reply === "skipped:key-invalid" || reply === "skipped:model-error") return reply;
+  if (reply === "skipped:key-invalid" || reply === "skipped:model-error" || reply === "skipped:quota") return reply;
 
   const text = truncateForWhatsApp(reply.trim());
   if (!text) return "skipped:empty";
@@ -247,7 +254,7 @@ async function relayToCustomer(
   });
 
   const reply = await generateOrRecord(tenantId, rt, model, { system, messages: history, tools: {} });
-  if (reply === "skipped:key-invalid" || reply === "skipped:model-error") return reply;
+  if (reply === "skipped:key-invalid" || reply === "skipped:model-error" || reply === "skipped:quota") return reply;
   const text = truncateForWhatsApp(reply.trim());
   if (!text) return "skipped:empty";
 

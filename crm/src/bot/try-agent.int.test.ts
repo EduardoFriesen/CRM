@@ -1,3 +1,4 @@
+import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, describe, expect, it } from "vitest";
 import { saveAgentConfig } from "@/agent/config";
@@ -72,6 +73,20 @@ describe("tryAgent", () => {
     const r = await tryAgent(t.id, [{ role: "user", text: "¿Abren el domingo?" }], { model });
     expect(r).toMatchObject({ success: true, data: { adminNote: "(el bot consultaría al admin: ¿Abren el domingo?)" } });
     expect(await ownerSql`select 1 from escalations where tenant_id = ${t.id}`).toHaveLength(0);
+  });
+
+  it("explains an exhausted quota instead of a generic failure", async () => {
+    const t = await makeTenant();
+    await saveAgentConfig(t.id, { agentName: "Sofi", provider: "google", model: "m", apiKey: "sk-1234" }, async () => "valid");
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new APICallError({ message: "quota", url: "https://x", requestBodyValues: {}, statusCode: 429, responseBody: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" });
+      },
+    });
+    expect(await tryAgent(t.id, [{ role: "user", text: "Hola" }], { model })).toMatchObject({
+      success: false,
+      error: { code: "QUOTA_EXCEEDED", message: expect.stringMatching(/cuota/i) },
+    });
   });
 
   it("rejects an oversized history", async () => {

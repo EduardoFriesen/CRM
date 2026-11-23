@@ -198,6 +198,27 @@ describe("runConversation", () => {
     expect(roles[0]).toBe("user");
   });
 
+  it("stops on an exhausted daily quota instead of retrying", async () => {
+    const { t, c } = await setup();
+    await say(t.id, c.id, "customer", "Hola");
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new APICallError({
+          message: "You exceeded your current quota",
+          url: "https://x",
+          requestBodyValues: {},
+          statusCode: 429,
+          responseBody: '{"error":{"details":[{"violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}',
+        });
+      },
+    });
+    const send = sendOk();
+    expect(await runConversation(t.id, c.id, { model, send })).toBe("skipped:quota");
+    expect(send).not.toHaveBeenCalled();
+    expect(model.doGenerateCalls).toHaveLength(1);
+    expect((await getAgentView(t.id))?.lastErrorCode).toBe("QUOTA_EXCEEDED");
+  });
+
   it("does not retry permanent model errors and records them", async () => {
     const { t, c } = await setup();
     await say(t.id, c.id, "customer", "Hola");
