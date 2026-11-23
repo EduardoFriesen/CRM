@@ -4,7 +4,11 @@ import { enqueueReply } from "@/bot/queue";
 import { hashSecret } from "@/whatsapp/secret";
 import { handleEvolutionEvent } from "@/whatsapp/webhook";
 
-vi.mock("@/bot/queue", () => ({ enqueueReply: vi.fn(async () => {}) }));
+vi.mock("@/bot/queue", () => ({
+  enqueueReply: vi.fn(async () => {}),
+  enqueueRelay: vi.fn(async () => {}),
+  enqueueCheckAdmin: vi.fn(async () => {}),
+}));
 const enqueue = vi.mocked(enqueueReply);
 import { dropTenants, makeInstance, makeTenant, ownerSql } from "@/test/db";
 

@@ -1,9 +1,11 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isBotActive } from "@/agent/config";
-import { enqueueReply } from "@/bot/queue";
+import { HINT_TEXT, notifyAdmin } from "@/bot/admin-messages";
+import { enqueueCheckAdmin, enqueueReply } from "@/bot/queue";
+import { answerEscalation } from "@/facts/facts";
 import { getDb, withTenant } from "@/db/client";
-import { contacts, messages, whatsappInstances } from "@/db/schema";
+import { agentConfigs, contacts, escalations, messages, tenants, whatsappInstances } from "@/db/schema";
 import { isIgnoredJid, phoneFromJid } from "./jid";
 import { verifySecret } from "./secret";
 
@@ -31,6 +33,8 @@ const upsert = z.object({
       .nullish(),
     messageType: z.string().max(100).nullish(),
     messageTimestamp: z.union([z.number(), z.string()]).nullish(),
+    // Set when the message quotes another one (stanzaId = quoted message id).
+    contextInfo: z.object({ stanzaId: z.string().max(200).nullish() }).nullish(),
   }),
 });
 
@@ -80,19 +84,55 @@ function sentAt(ts: Upsert["messageTimestamp"]): Date {
   return Number.isFinite(n) && n > 0 ? new Date(n * 1000) : new Date();
 }
 
+const logCode = (what: string, e: unknown) => {
+  const err = e as { code?: unknown; name?: unknown } | null;
+  console.error(`${what} failed: ${String(err?.code ?? err?.name ?? "unknown")}`);
+};
+
+const HINT_EVERY = "10 minutes";
+
+// The admin's personal number is an operations channel: never a customer, never stored
+// as a message, never answered by the bot. Quoted replies answer pending questions.
+async function handleAdminMessage(tenantId: string, d: Upsert): Promise<void> {
+  if (d.key.fromMe) return; // our own messages to the admin (questions, reminders)
+  const quoted = d.contextInfo?.stanzaId;
+  if (quoted) {
+    await answerEscalation(tenantId, quoted, messageText(d));
+    return;
+  }
+  const shouldHint = await withTenant(tenantId, async (tx) => {
+    const [p] = await tx.select({ id: escalations.id }).from(escalations).where(eq(escalations.status, "pending")).limit(1);
+    if (!p) return false;
+    const claimed = await tx
+      .update(agentConfigs)
+      .set({ adminHintAt: sql`now()` })
+      .where(sql`${agentConfigs.adminHintAt} is null or ${agentConfigs.adminHintAt} < now() - interval '${sql.raw(HINT_EVERY)}'`)
+      .returning({ tenantId: agentConfigs.tenantId });
+    return claimed.length > 0;
+  });
+  if (shouldHint) await notifyAdmin(tenantId, HINT_TEXT).catch((e) => logCode("admin hint", e));
+}
+
 async function storeMessage(tenantId: string, d: Upsert): Promise<void> {
   const jid = d.key.remoteJid;
   if (isIgnoredJid(jid)) return;
   const fromMe = d.key.fromMe ?? false;
   const at = sentAt(d.messageTimestamp);
 
-  const contactId = await withTenant(tenantId, async (tx) => {
+  const phone = phoneFromJid(jid, d.key.remoteJidAlt ?? undefined);
+  const [tenant] = await getDb().select({ adminPhone: tenants.adminPhone }).from(tenants).where(eq(tenants.id, tenantId));
+  if (phone && phone === tenant?.adminPhone) {
+    await handleAdminMessage(tenantId, d);
+    return;
+  }
+
+  const contact = await withTenant(tenantId, async (tx) => {
     const [contact] = await tx
       .insert(contacts)
       .values({
         tenantId,
         jid,
-        phone: phoneFromJid(jid, d.key.remoteJidAlt ?? undefined),
+        phone,
         // pushName on our own messages is the business's name, not the customer's.
         name: fromMe ? null : d.pushName || null,
         lastMessageAt: at,
@@ -105,7 +145,7 @@ async function storeMessage(tenantId: string, d: Upsert): Promise<void> {
           lastMessageAt: sql`greatest(${contacts.lastMessageAt}, excluded.last_message_at)`,
         },
       })
-      .returning({ id: contacts.id });
+      .returning({ id: contacts.id, botPausedUntil: contacts.botPausedUntil });
 
     await tx
       .insert(messages)
@@ -119,16 +159,21 @@ async function storeMessage(tenantId: string, d: Upsert): Promise<void> {
         sentAt: at,
       })
       .onConflictDoNothing({ target: [messages.tenantId, messages.waMessageId] });
-    return contact.id;
+    return contact;
   });
 
-  // Only customers' messages wake the bot, and only while it is on: messages that arrive
-  // while it is off are never answered later. A queue outage must not lose the message.
-  if (fromMe) return;
+  // From the business number: if it was a person (not the bot's echo), pause this chat.
+  if (fromMe) {
+    await enqueueCheckAdmin(tenantId, contact.id, d.key.id).catch((e) => logCode("enqueue admin check", e));
+    return;
+  }
+  // Only customers' messages wake the bot, and only while it is on and the chat isn't
+  // paused: messages that arrive meanwhile are never answered later. A queue outage must
+  // not lose the message.
+  if (contact.botPausedUntil && contact.botPausedUntil > new Date()) return;
   try {
-    if (await isBotActive(tenantId)) await enqueueReply(tenantId, contactId);
+    if (await isBotActive(tenantId)) await enqueueReply(tenantId, contact.id);
   } catch (e) {
-    const err = e as { code?: unknown; name?: unknown } | null;
-    console.error(`enqueue reply failed: ${String(err?.code ?? err?.name ?? "unknown")}`);
+    logCode("enqueue reply", e);
   }
 }
