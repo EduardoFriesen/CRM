@@ -12,6 +12,7 @@ const sentence = (s: string) => {
 };
 
 export const HINT_TEXT = "Para responder una consulta, citá el mensaje de la consulta.";
+export const NO_MATCH_TEXT = "Esa consulta ya fue respondida o no la encuentro.";
 
 export const escalationText = (c: Who, question: string) =>
   `Consulta de ${who(c)}: ${sentence(question)} Respondé citando este mensaje.`;

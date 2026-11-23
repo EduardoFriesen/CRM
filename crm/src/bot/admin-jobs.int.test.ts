@@ -66,6 +66,8 @@ describe("sendReminder", () => {
     );
     expect(await sendReminder(t.id, id, { send })).toBe("skipped");
     expect(send).toHaveBeenCalledTimes(1);
+    const [row] = await ownerSql<{ reminder_message_id: string }[]>`select reminder_message_id from escalations where id = ${id}`;
+    expect(row.reminder_message_id).toBe("R1");
   });
 
   it("does not remind about answered questions", async () => {

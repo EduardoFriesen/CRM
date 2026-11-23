@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { fail, ok, type Result } from "@/lib/result";
 import { withTenant } from "@/db/client";
@@ -30,7 +30,12 @@ export async function answerEscalation(tenantId: string, quotedId: string, answe
     const [esc] = await tx
       .update(escalations)
       .set({ status: "answered", answer: text, answeredAt: sql`now()` })
-      .where(and(eq(escalations.adminMessageId, quotedId), eq(escalations.status, "pending")))
+      .where(
+        and(
+          or(eq(escalations.adminMessageId, quotedId), eq(escalations.reminderMessageId, quotedId)),
+          eq(escalations.status, "pending"),
+        ),
+      )
       .returning({
         id: escalations.id,
         question: escalations.question,

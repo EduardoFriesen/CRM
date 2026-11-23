@@ -113,6 +113,27 @@ describe("admin channel", () => {
     expect(relay).toHaveBeenCalledOnce();
   });
 
+  it("accepts an answer that quotes the reminder", async () => {
+    const ana = await makeContact(t.id, { name: "Ana", phone: "5491122334471" });
+    const q = await pending(ana.id);
+    await ownerSql`update escalations set reminder_message_id = 'REM-1', reminded_at = now() where id = ${q.id}`;
+    await post(event({ jid: `${ADMIN}@s.whatsapp.net`, text: "Sí, los martes", quoted: "REM-1" }));
+    expect((await status(q.id)).status).toBe("answered");
+  });
+
+  it("tells the admin when a quoted message matches no pending question", async () => {
+    await ownerSql`update agent_configs set admin_hint_at = null where tenant_id = ${t.id}`;
+    await post(event({ jid: `${ADMIN}@s.whatsapp.net`, text: "Sí", quoted: "NOPE-1" }));
+    expect(notify).toHaveBeenCalledWith(t.id, "Esa consulta ya fue respondida o no la encuentro.");
+  });
+
+  it("works when the admin uses the business number itself (answers arrive as fromMe)", async () => {
+    const ana = await makeContact(t.id, { name: "Ana", phone: "5491122334472" });
+    const q = await pending(ana.id);
+    await post(event({ jid: `${ADMIN}@s.whatsapp.net`, fromMe: true, text: "Sí, los martes", quoted: q.adminId }));
+    expect((await status(q.id)).status).toBe("answered");
+  });
+
   it("ignores a second answer to the same question", async () => {
     const ana = await makeContact(t.id, { name: "Ana", phone: "5491122334459" });
     const q = await pending(ana.id);

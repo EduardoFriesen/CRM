@@ -1,0 +1,1 @@
+ALTER TABLE "escalations" ADD COLUMN "reminder_message_id" text;

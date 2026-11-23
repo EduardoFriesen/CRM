@@ -40,9 +40,12 @@ export async function sendReminder(
       .where(and(eq(escalations.id, escalationId), eq(escalations.status, "pending"), isNull(escalations.remindedAt))),
   );
   if (!esc) return "skipped";
-  await notifyAdmin(tenantId, reminderText(esc, esc.question), deps);
+  const sent = await notifyAdmin(tenantId, reminderText(esc, esc.question), deps);
   await withTenant(tenantId, (tx) =>
-    tx.update(escalations).set({ remindedAt: sql`now()` }).where(eq(escalations.id, escalationId)),
+    tx
+      .update(escalations)
+      .set({ remindedAt: sql`now()`, reminderMessageId: sent.id })
+      .where(eq(escalations.id, escalationId)),
   );
   return "sent";
 }

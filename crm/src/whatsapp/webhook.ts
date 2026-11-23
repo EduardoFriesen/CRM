@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isBotActive } from "@/agent/config";
-import { HINT_TEXT, notifyAdmin } from "@/bot/admin-messages";
+import { HINT_TEXT, NO_MATCH_TEXT, notifyAdmin } from "@/bot/admin-messages";
 import { enqueueCheckAdmin, enqueueReply } from "@/bot/queue";
 import { answerEscalation } from "@/facts/facts";
 import { getDb, withTenant } from "@/db/client";
@@ -93,16 +93,13 @@ const HINT_EVERY = "10 minutes";
 
 // The admin's personal number is an operations channel: never a customer, never stored
 // as a message, never answered by the bot. Quoted replies answer pending questions.
-async function handleAdminMessage(tenantId: string, d: Upsert): Promise<void> {
-  if (d.key.fromMe) return; // our own messages to the admin (questions, reminders)
-  const quoted = d.contextInfo?.stanzaId;
-  if (quoted) {
-    await answerEscalation(tenantId, quoted, messageText(d));
-    return;
-  }
-  const shouldHint = await withTenant(tenantId, async (tx) => {
-    const [p] = await tx.select({ id: escalations.id }).from(escalations).where(eq(escalations.status, "pending")).limit(1);
-    if (!p) return false;
+// Atomically claims the 10-minute slot for an unsolicited notice to the admin.
+async function claimAdminNotice(tenantId: string, onlyIfPending: boolean): Promise<boolean> {
+  return withTenant(tenantId, async (tx) => {
+    if (onlyIfPending) {
+      const [p] = await tx.select({ id: escalations.id }).from(escalations).where(eq(escalations.status, "pending")).limit(1);
+      if (!p) return false;
+    }
     const claimed = await tx
       .update(agentConfigs)
       .set({ adminHintAt: sql`now()` })
@@ -110,7 +107,21 @@ async function handleAdminMessage(tenantId: string, d: Upsert): Promise<void> {
       .returning({ tenantId: agentConfigs.tenantId });
     return claimed.length > 0;
   });
-  if (shouldHint) await notifyAdmin(tenantId, HINT_TEXT).catch((e) => logCode("admin hint", e));
+}
+
+async function handleAdminMessage(tenantId: string, d: Upsert): Promise<void> {
+  const quoted = d.contextInfo?.stanzaId;
+  // Our own notifications to the admin echo back as fromMe and never quote anything.
+  // A quoted fromMe is the admin answering from the business number itself (self-chat).
+  if (d.key.fromMe && !quoted) return;
+  if (quoted) {
+    const result = await answerEscalation(tenantId, quoted, messageText(d));
+    if (result === "ignored" && (await claimAdminNotice(tenantId, false))) {
+      await notifyAdmin(tenantId, NO_MATCH_TEXT).catch((e) => logCode("admin no-match", e));
+    }
+    return;
+  }
+  if (await claimAdminNotice(tenantId, true)) await notifyAdmin(tenantId, HINT_TEXT).catch((e) => logCode("admin hint", e));
 }
 
 async function storeMessage(tenantId: string, d: Upsert): Promise<void> {

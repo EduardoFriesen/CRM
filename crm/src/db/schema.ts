@@ -133,6 +133,8 @@ export const escalations = pgTable(
     status: escalationStatus().notNull().default("pending"),
     answer: text(),
     remindedAt: timestamp("reminded_at", { withTimezone: true }),
+    // The admin may answer by quoting the reminder instead of the original question.
+    reminderMessageId: text("reminder_message_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     answeredAt: timestamp("answered_at", { withTimezone: true }),
   },
