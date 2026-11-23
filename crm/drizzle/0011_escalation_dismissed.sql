@@ -1,0 +1,1 @@
+ALTER TYPE "public"."escalation_status" ADD VALUE 'dismissed';

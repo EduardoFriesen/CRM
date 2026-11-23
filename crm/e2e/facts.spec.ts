@@ -32,6 +32,13 @@ test("shows pending questions and lets you edit and delete learned answers", asy
   await expect(page.getByText("¿Hacen envíos a Pilar?")).toHaveCount(0);
 });
 
+test("a pending question can be dismissed", async ({ page }) => {
+  await page.goto(`/t/${slug}/aprendido`);
+  const item = page.getByRole("listitem").filter({ hasText: "¿Abren el domingo?" });
+  await item.getByRole("button", { name: "Descartar" }).click();
+  await expect(page.getByText("¿Abren el domingo?")).toHaveCount(0);
+});
+
 test("explains what this screen is for when nothing was learned yet", async ({ page }) => {
   await page.goto(`/t/${emptySlug}/aprendido`);
   await expect(page.getByText(/Todavía no aprendió nada/)).toBeVisible();

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { getAgentView, saveAgentConfig } from "@/agent/config";
 import { reactivateBot } from "@/contacts/contacts";
-import { deleteFact, listFacts, listPendingEscalations, updateFact } from "@/facts/facts";
+import { deleteFact, dismissEscalation, listFacts, listPendingEscalations, updateFact } from "@/facts/facts";
 import { dropTenants, makeContact, makeTenant, ownerSql } from "@/test/db";
 
 afterAll(async () => {
@@ -53,6 +53,22 @@ describe("learned facts", () => {
     expect(await listPendingEscalations(t.id)).toEqual([
       expect.objectContaining({ question: "¿Abren el domingo?", contactName: "Ana" }),
     ]);
+  });
+});
+
+describe("dismissEscalation", () => {
+  it("removes a pending question from the list, only for the tenant's own", async () => {
+    const a = await makeTenant();
+    const b = await makeTenant();
+    const ca = await makeContact(a.id, { name: "Ana" });
+    const cb = await makeContact(b.id);
+    const [ea] = await ownerSql<{ id: string }[]>`insert into escalations (tenant_id, contact_id, question, is_price, admin_message_id)
+      values (${a.id}, ${ca.id}, '¿Domingo?', false, 'D1') returning id`;
+    const [eb] = await ownerSql<{ id: string }[]>`insert into escalations (tenant_id, contact_id, question, is_price, admin_message_id)
+      values (${b.id}, ${cb.id}, '¿Domingo?', false, 'D2') returning id`;
+    expect(await dismissEscalation(a.id, eb.id)).toMatchObject({ error: { code: "NOT_FOUND" } });
+    expect(await dismissEscalation(a.id, ea.id)).toEqual({ success: true, data: { id: ea.id } });
+    expect(await listPendingEscalations(a.id)).toEqual([]);
   });
 });
 

@@ -106,3 +106,15 @@ export function listPendingEscalations(tenantId: string): Promise<PendingQuestio
       .orderBy(asc(escalations.createdAt)),
   );
 }
+
+export async function dismissEscalation(tenantId: string, id: string): Promise<Result<{ id: string }>> {
+  if (!factId.safeParse(id).success) return fail("NOT_FOUND", "No encontramos esa consulta");
+  const [row] = await withTenant(tenantId, (tx) =>
+    tx
+      .update(escalations)
+      .set({ status: "dismissed" })
+      .where(and(eq(escalations.id, id), eq(escalations.tenantId, tenantId), eq(escalations.status, "pending")))
+      .returning({ id: escalations.id }),
+  );
+  return row ? ok(row) : fail("NOT_FOUND", "No encontramos esa consulta");
+}

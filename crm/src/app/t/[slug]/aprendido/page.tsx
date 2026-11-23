@@ -1,6 +1,7 @@
 import { listFacts, listPendingEscalations } from "@/facts/facts";
 import { relativeTime } from "@/lib/time";
 import { getCurrentTenant } from "@/tenants/tenants";
+import { DismissButton } from "./dismiss-button";
 import { FactsManager } from "./facts-manager";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export default async function LearnedPage({ params }: { params: Promise<{ slug: 
                 <span className="meta-note">
                   {p.contactName ?? "Un cliente"} · {relativeTime(p.createdAt, now)} · respondé citando el mensaje en tu WhatsApp
                 </span>
+                <DismissButton slug={tenant.slug} id={p.id} question={p.question} />
               </li>
             ))}
           </ul>

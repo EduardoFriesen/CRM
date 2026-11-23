@@ -115,7 +115,7 @@ export const agentConfigs = pgTable(
 );
 export type AgentConfigRow = typeof agentConfigs.$inferSelect;
 
-export const escalationStatus = pgEnum("escalation_status", ["pending", "answered"]);
+export const escalationStatus = pgEnum("escalation_status", ["pending", "answered", "dismissed"]);
 
 export const escalations = pgTable(
   "escalations",

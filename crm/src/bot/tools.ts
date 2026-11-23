@@ -1,5 +1,5 @@
 import { tool } from "ai";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { recordAgentError } from "@/agent/config";
 import { searchCatalog } from "@/catalog/catalog";
@@ -66,7 +66,14 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
           tx
             .select({ pending: count() })
             .from(escalations)
-            .where(and(eq(escalations.contactId, contactId), eq(escalations.status, "pending"))),
+            // Questions older than 48 h no longer block new ones (the admin may never answer).
+            .where(
+              and(
+                eq(escalations.contactId, contactId),
+                eq(escalations.status, "pending"),
+                gt(escalations.createdAt, sql`now() - interval '48 hours'`),
+              ),
+            ),
         );
         if (pending >= MAX_PENDING_PER_CONTACT) return FALLBACK;
         let sent: { id: string };

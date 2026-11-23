@@ -247,6 +247,21 @@ describe("runConversation", () => {
       expect(toolOutput(model)).toContain("no tengo ese dato");
     });
 
+    it("does not count questions older than 48 h against the limit", async () => {
+      const { t, c } = await setup();
+      for (let i = 0; i < 3; i++) {
+        await ownerSql`insert into escalations (tenant_id, contact_id, question, is_price, admin_message_id, created_at)
+          values (${t.id}, ${c.id}, ${"vieja" + i}, false, ${"old-" + i + Math.random()}, now() - interval '3 days')`;
+      }
+      await say(t.id, c.id, "customer", "¿Abren los domingos?");
+      const model = new MockLanguageModelV4({
+        doGenerate: [toolCall("ask_admin", { question: "¿Abren los domingos?", is_price: false, general: true }), text("Lo consulto.")],
+      });
+      const send = vi.fn(async (...[, jid]: [string, string]) => ({ id: `${jid}-${Math.random()}` }));
+      await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
+      expect(send.mock.calls.some(([, jid]) => jid === ADMIN_JID)).toBe(true);
+    });
+
     it("does not record an escalation when the admin cannot be reached", async () => {
       const { t, c } = await setup();
       await say(t.id, c.id, "customer", "¿Envíos?");
