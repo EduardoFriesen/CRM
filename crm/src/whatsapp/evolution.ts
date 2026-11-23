@@ -61,6 +61,16 @@ export async function setWebhook(instanceName: string, secret: string): Promise<
   await call(`/webhook/set/${name(instanceName)}`, { method: "POST", body: { webhook: webhookConfig(instanceName, secret) } });
 }
 
+const sendResponse = z.object({ key: z.object({ id: z.string().min(1) }) });
+
+// number accepts a phone or a full JID (Evolution 2.3.7 SendTextDto = { number, text }).
+export async function sendText(instanceName: string, number: string, text: string): Promise<{ id: string }> {
+  const body = sendResponse.parse(
+    await call(`/message/sendText/${name(instanceName)}`, { method: "POST", body: { number, text } }),
+  );
+  return { id: body.key.id };
+}
+
 const connectResponse = z.object({ base64: z.string().optional() });
 
 // While connecting Evolution returns the QR object; once open it returns the state instead.

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { connect, connectionState, createInstance, EvolutionError } from "@/whatsapp/evolution";
+import { connect, connectionState, createInstance, EvolutionError, sendText } from "@/whatsapp/evolution";
 
 const fetchMock = vi.fn();
 
@@ -55,5 +55,13 @@ describe("evolution client", () => {
     const err = await connectionState("pepe").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(EvolutionError);
     expect(String((err as Error).message)).not.toContain("secret internals");
+  });
+
+  it("sends a text and returns the WhatsApp message id", async () => {
+    fetchMock.mockResolvedValue(json({ key: { id: "ABC", remoteJid: "x" }, status: "PENDING" }, 201));
+    expect(await sendText("pepe", "5491122334455@s.whatsapp.net", "hola")).toEqual({ id: "ABC" });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://evo:8080/message/sendText/pepe");
+    expect(JSON.parse(init.body)).toEqual({ number: "5491122334455@s.whatsapp.net", text: "hola" });
   });
 });
