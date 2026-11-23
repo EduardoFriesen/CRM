@@ -52,8 +52,11 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
       inputSchema: z.object({
         question: z.string().trim().min(1).max(500).describe("La pregunta, sin datos personales del cliente"),
         is_price: z.boolean().describe("true si es sobre precios, costos, descuentos o recargos"),
+        general: z
+          .boolean()
+          .describe("false si la respuesta depende de este cliente (su pedido, su reserva, su envío); true si sirve para cualquiera"),
       }),
-      execute: async ({ question, is_price }) => {
+      execute: async ({ question, is_price, general }) => {
         if (opts.dryRun) {
           opts.onAdmin?.("ask", question);
           return { ok: true };
@@ -75,7 +78,7 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
         const [esc] = await withTenant(tenantId, (tx) =>
           tx
             .insert(escalations)
-            .values({ tenantId, contactId, question, isPrice: is_price, adminMessageId: sent.id })
+            .values({ tenantId, contactId, question, isPrice: is_price, isGeneral: general, adminMessageId: sent.id })
             .returning({ id: escalations.id }),
         );
         // A missing reminder must not undo a question the admin already received.

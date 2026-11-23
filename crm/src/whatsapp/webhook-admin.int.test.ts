@@ -53,11 +53,11 @@ const event = (o: { jid: string; alt?: string; fromMe?: boolean; text: string; q
   },
 });
 const post = (body: unknown) => handleEvolutionEvent(t.slug, SECRET, body);
-const pending = async (contactId: string, isPrice = false) => {
+const pending = async (contactId: string, isPrice = false, general = true) => {
   const adminId = `ADM-${Math.random()}`;
   const [e] = await ownerSql<{ id: string }[]>`
-    insert into escalations (tenant_id, contact_id, question, is_price, admin_message_id)
-    values (${t.id}, ${contactId}, '¿Hacen envíos a Pilar?', ${isPrice}, ${adminId}) returning id`;
+    insert into escalations (tenant_id, contact_id, question, is_price, is_general, admin_message_id)
+    values (${t.id}, ${contactId}, '¿Hacen envíos a Pilar?', ${isPrice}, ${general}, ${adminId}) returning id`;
   return { id: e.id, adminId };
 };
 const status = async (id: string) =>
@@ -102,6 +102,15 @@ describe("admin channel", () => {
     const q = await pending(ana.id, true);
     await post(event({ jid: `${ADMIN}@s.whatsapp.net`, text: "Sí", quoted: q.adminId }));
     expect(await factsFor(q.id)).toHaveLength(0);
+  });
+
+  it("relays but never learns an answer that only applies to this customer", async () => {
+    const ana = await makeContact(t.id, { name: "Ana", phone: "5491122334470" });
+    const q = await pending(ana.id, false, false);
+    await post(event({ jid: `${ADMIN}@s.whatsapp.net`, text: "Sí, ya está listo, pasá a retirarlo", quoted: q.adminId }));
+    expect((await status(q.id)).status).toBe("answered");
+    expect(await factsFor(q.id)).toHaveLength(0);
+    expect(relay).toHaveBeenCalledOnce();
   });
 
   it("ignores a second answer to the same question", async () => {

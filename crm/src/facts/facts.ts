@@ -3,7 +3,7 @@ import { z } from "zod";
 import { fail, ok, type Result } from "@/lib/result";
 import { withTenant } from "@/db/client";
 import { businessFacts, contacts, escalations, type BusinessFact } from "@/db/schema";
-import { notifyAdmin, relayConfirmText } from "@/bot/admin-messages";
+import { notifyAdmin, relayConfirmText, type NotLearned } from "@/bot/admin-messages";
 import { mentionsMoney } from "@/bot/money-guard";
 import { enqueueRelay } from "@/bot/queue";
 
@@ -31,16 +31,23 @@ export async function answerEscalation(tenantId: string, quotedId: string, answe
       .update(escalations)
       .set({ status: "answered", answer: text, answeredAt: sql`now()` })
       .where(and(eq(escalations.adminMessageId, quotedId), eq(escalations.status, "pending")))
-      .returning({ id: escalations.id, question: escalations.question, isPrice: escalations.isPrice, contactId: escalations.contactId });
+      .returning({
+        id: escalations.id,
+        question: escalations.question,
+        isPrice: escalations.isPrice,
+        isGeneral: escalations.isGeneral,
+        contactId: escalations.contactId,
+      });
     if (!esc) return null;
-    const price = esc.isPrice || mentionsMoney(`${esc.question} ${text}`);
-    if (!price) await tx.insert(businessFacts).values({ tenantId, question: esc.question, answer: text, escalationId: esc.id });
+    const notLearned: NotLearned =
+      esc.isPrice || mentionsMoney(`${esc.question} ${text}`) ? "price" : esc.isGeneral ? null : "personal";
+    if (!notLearned) await tx.insert(businessFacts).values({ tenantId, question: esc.question, answer: text, escalationId: esc.id });
     const [c] = await tx.select({ name: contacts.name }).from(contacts).where(eq(contacts.id, esc.contactId));
-    return { id: esc.id, price, name: c?.name ?? null };
+    return { id: esc.id, notLearned, name: c?.name ?? null };
   });
   if (!result) return "ignored";
   await enqueueRelay(tenantId, result.id).catch((e) => logCode("enqueue relay", e));
-  await notifyAdmin(tenantId, relayConfirmText(result.name, result.price)).catch((e) => logCode("admin confirm", e));
+  await notifyAdmin(tenantId, relayConfirmText(result.name, result.notLearned)).catch((e) => logCode("admin confirm", e));
   return "answered";
 }
 

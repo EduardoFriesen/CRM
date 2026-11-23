@@ -21,8 +21,14 @@ export const reminderText = (c: Who, question: string) => `Recordatorio: ${escal
 export const handoffText = (c: Who, reason: string) =>
   `Traspaso: ${who(c)} quiere cerrar una compra. ${sentence(reason)} Atendelo desde el WhatsApp del negocio.`;
 
-export const relayConfirmText = (name: string | null, notLearnedBecausePrice: boolean) =>
-  `Listo, le respondí a ${name || "un cliente"}.${notLearnedBecausePrice ? " (no la guardé porque es de precios)" : ""}`;
+export type NotLearned = "price" | "personal" | null;
+const NOT_LEARNED_NOTE: Record<Exclude<NotLearned, null>, string> = {
+  price: " (no la guardé porque es de precios)",
+  personal: " (no la guardé porque es sobre este cliente)",
+};
+
+export const relayConfirmText = (name: string | null, notLearned: NotLearned) =>
+  `Listo, le respondí a ${name || "un cliente"}.${notLearned ? NOT_LEARNED_NOTE[notLearned] : ""}`;
 
 // Sends to the admin's personal WhatsApp through the tenant's own instance.
 export async function notifyAdmin(

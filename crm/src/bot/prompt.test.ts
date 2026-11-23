@@ -59,7 +59,7 @@ describe("learned facts and 2b rules", () => {
   it("tells the model to ask the admin and to hand off, before the business data", () => {
     const p = buildSystemPrompt(base);
     const open = p.indexOf("<negocio>");
-    for (const needle of ["ask_admin", "is_price", "handoff_to_admin", "lo consulto y te aviso"]) {
+    for (const needle of ["ask_admin", "is_price", "general=false", "handoff_to_admin", "lo consulto y te aviso"]) {
       expect(p.indexOf(needle)).toBeGreaterThanOrEqual(0);
       expect(p.indexOf(needle)).toBeLessThan(open);
     }

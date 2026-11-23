@@ -61,7 +61,7 @@ describe("tryAgent", () => {
     const model = new MockLanguageModelV4({
       doGenerate: [
         {
-          content: [{ type: "tool-call", toolCallId: "a1", toolName: "ask_admin", input: JSON.stringify({ question: "¿Abren el domingo?", is_price: false }) }],
+          content: [{ type: "tool-call", toolCallId: "a1", toolName: "ask_admin", input: JSON.stringify({ question: "¿Abren el domingo?", is_price: false, general: true }) }],
           finishReason: { unified: "tool-calls", raw: undefined },
           usage,
           warnings: [],

@@ -127,6 +127,8 @@ export const escalations = pgTable(
       .references(() => contacts.id, { onDelete: "cascade" }),
     question: text().notNull(),
     isPrice: boolean("is_price").notNull(),
+    // false when the answer only applies to this customer (their order, their booking).
+    isGeneral: boolean("is_general").notNull().default(true),
     adminMessageId: text("admin_message_id").notNull(),
     status: escalationStatus().notNull().default("pending"),
     answer: text(),

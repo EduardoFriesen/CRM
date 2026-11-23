@@ -28,8 +28,9 @@ describe("admin messages", () => {
   });
 
   it("confirms a relay, noting when a price was not learned", () => {
-    expect(relayConfirmText("Ana", false)).toBe("Listo, le respondí a Ana.");
-    expect(relayConfirmText(null, true)).toBe("Listo, le respondí a un cliente. (no la guardé porque es de precios)");
+    expect(relayConfirmText("Ana", null)).toBe("Listo, le respondí a Ana.");
+    expect(relayConfirmText(null, "price")).toBe("Listo, le respondí a un cliente. (no la guardé porque es de precios)");
+    expect(relayConfirmText("Ana", "personal")).toBe("Listo, le respondí a Ana. (no la guardé porque es sobre este cliente)");
   });
 
   it("has the quoting hint", () => {

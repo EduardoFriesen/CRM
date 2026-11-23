@@ -217,16 +217,16 @@ describe("runConversation", () => {
       const { t, c } = await setup();
       await say(t.id, c.id, "customer", "¿Hacen envíos a Pilar?");
       const model = new MockLanguageModelV4({
-        doGenerate: [toolCall("ask_admin", { question: "¿Hacen envíos a Pilar?", is_price: false }), text("Lo consulto y te aviso.")],
+        doGenerate: [toolCall("ask_admin", { question: "¿Hacen envíos a Pilar?", is_price: false, general: true }), text("Lo consulto y te aviso.")],
       });
       const send = vi.fn(async (_i: string, jid: string) => ({ id: jid === ADMIN_JID ? "ADM-1" : "CUS-1" }));
       const scheduleReminder = vi.fn(async () => {});
       expect(await runConversation(t.id, c.id, { model, send, scheduleReminder })).toBe("sent");
       expect(send).toHaveBeenCalledWith(t.slug, ADMIN_JID, "Consulta de Ana (+5491122334455): ¿Hacen envíos a Pilar? Respondé citando este mensaje.");
       expect(send).toHaveBeenCalledWith(t.slug, c.jid, "Lo consulto y te aviso.");
-      const [esc] = await ownerSql<{ id: string; status: string; admin_message_id: string; is_price: boolean }[]>`
-        select id, status, admin_message_id, is_price from escalations where contact_id = ${c.id}`;
-      expect(esc).toMatchObject({ status: "pending", admin_message_id: "ADM-1", is_price: false });
+      const [esc] = await ownerSql<{ id: string; status: string; admin_message_id: string; is_price: boolean; is_general: boolean }[]>`
+        select id, status, admin_message_id, is_price, is_general from escalations where contact_id = ${c.id}`;
+      expect(esc).toMatchObject({ status: "pending", admin_message_id: "ADM-1", is_price: false, is_general: true });
       expect(scheduleReminder).toHaveBeenCalledWith(esc.id);
     });
 
@@ -238,7 +238,7 @@ describe("runConversation", () => {
       }
       await say(t.id, c.id, "customer", "¿Y los domingos?");
       const model = new MockLanguageModelV4({
-        doGenerate: [toolCall("ask_admin", { question: "¿Abren los domingos?", is_price: false }), text("No tengo ese dato.")],
+        doGenerate: [toolCall("ask_admin", { question: "¿Abren los domingos?", is_price: false, general: true }), text("No tengo ese dato.")],
       });
       const send = vi.fn(async (...[, jid]: [string, string]) => ({ id: `X-${jid}-${Math.random()}` }));
       await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
@@ -251,7 +251,7 @@ describe("runConversation", () => {
       const { t, c } = await setup();
       await say(t.id, c.id, "customer", "¿Envíos?");
       const model = new MockLanguageModelV4({
-        doGenerate: [toolCall("ask_admin", { question: "¿Envíos?", is_price: false }), text("No tengo ese dato.")],
+        doGenerate: [toolCall("ask_admin", { question: "¿Envíos?", is_price: false, general: true }), text("No tengo ese dato.")],
       });
       const send = vi.fn(async (_i: string, jid: string) => {
         if (jid === ADMIN_JID) throw new Error("evolution down");

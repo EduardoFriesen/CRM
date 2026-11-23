@@ -1,0 +1,1 @@
+ALTER TABLE "escalations" ADD COLUMN "is_general" boolean DEFAULT true NOT NULL;
