@@ -49,7 +49,7 @@ test("a card without a visible number is not a link", async ({ page }) => {
 test("changing the stage moves the card", async ({ page }) => {
   await page.goto(`/t/${slug}`);
   await page.getByLabel("Etapa de Ana").selectOption("venta");
-  await expect(page.getByRole("region", { name: "Venta 1", exact: true }).getByText("Ana")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Venta 1", exact: true }).getByText("Ana", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Venta 1", exact: true })).toBeVisible();
 });
 

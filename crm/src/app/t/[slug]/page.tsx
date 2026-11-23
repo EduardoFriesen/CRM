@@ -5,7 +5,12 @@ import { messagePreview } from "@/contacts/preview";
 import { waLink } from "@/contacts/wa-link";
 import { STAGES, type Stage } from "@/db/schema";
 import { relativeTime } from "@/lib/time";
+import { listProducts } from "@/catalog/catalog";
+import { listOrders } from "@/orders/orders";
+import { todayInBuenosAires } from "@/orders/group";
 import { getCurrentTenant } from "@/tenants/tenants";
+import { CreateOrderButton, type OrderProduct } from "./order-form";
+import { OrdersSection } from "./orders-section";
 import { AutoRefresh } from "./auto-refresh";
 import { ReactivateButton } from "./reactivate-button";
 import { StageSelect } from "./stage-select";
@@ -13,9 +18,26 @@ import { STAGE_LABELS } from "./stages";
 
 export const dynamic = "force-dynamic";
 
-export default async function BoardPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function BoardPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ pedidos?: string }>;
+}) {
   const tenant = await getCurrentTenant((await params).slug);
-  const [board, agent] = await Promise.all([listBoard(tenant.id), getAgentView(tenant.id)]);
+  const showClosed = (await searchParams).pedidos === "cerrados";
+  const [board, agent, pendingOrders, closedOrders, catalog] = await Promise.all([
+    listBoard(tenant.id),
+    getAgentView(tenant.id),
+    listOrders(tenant.id, { closed: false }),
+    showClosed ? listOrders(tenant.id, { closed: true }) : Promise.resolve([]),
+    listProducts(tenant.id),
+  ]);
+  const products: OrderProduct[] = catalog
+    .filter((p) => p.active)
+    .map((p) => ({ id: p.id, name: p.name, price: p.price, stock: p.stock }));
+  const today = todayInBuenosAires();
   const total = STAGES.reduce((n, s) => n + board[s].length, 0);
   const now = new Date();
 
@@ -42,10 +64,11 @@ export default async function BoardPage({ params }: { params: Promise<{ slug: st
       ) : (
         <div className="board">
           {STAGES.map((stage) => (
-            <Column key={stage} stage={stage} contacts={board[stage]} slug={tenant.slug} now={now} />
+            <Column key={stage} stage={stage} contacts={board[stage]} slug={tenant.slug} now={now} products={products} today={today} />
           ))}
         </div>
       )}
+      <OrdersSection slug={tenant.slug} pending={pendingOrders} closed={closedOrders} showClosed={showClosed} now={now} />
     </main>
   );
 }
@@ -73,7 +96,16 @@ const pauseClock = new Intl.DateTimeFormat("es-AR", {
   hour12: false,
 });
 
-function Column({ stage, contacts, slug, now }: { stage: Stage; contacts: BoardContact[]; slug: string; now: Date }) {
+type OrderContext = { products: OrderProduct[]; today: string };
+
+function Column({
+  stage,
+  contacts,
+  slug,
+  now,
+  products,
+  today,
+}: { stage: Stage; contacts: BoardContact[]; slug: string; now: Date } & OrderContext) {
   const id = `col-${stage}`;
   return (
     <section className="column" data-stage={stage} aria-labelledby={id}>
@@ -86,7 +118,7 @@ function Column({ stage, contacts, slug, now }: { stage: Stage; contacts: BoardC
         <ul className="cards">
           {contacts.map((c) => (
             <li key={c.id}>
-              <Card contact={c} stage={stage} slug={slug} now={now} />
+              <Card contact={c} stage={stage} slug={slug} now={now} products={products} today={today} />
             </li>
           ))}
         </ul>
@@ -95,7 +127,14 @@ function Column({ stage, contacts, slug, now }: { stage: Stage; contacts: BoardC
   );
 }
 
-function Card({ contact, stage, slug, now }: { contact: BoardContact; stage: Stage; slug: string; now: Date }) {
+function Card({
+  contact,
+  stage,
+  slug,
+  now,
+  products,
+  today,
+}: { contact: BoardContact; stage: Stage; slug: string; now: Date } & OrderContext) {
   const name = contact.name ?? (contact.phone ? `+${contact.phone}` : "Sin nombre");
   const href = waLink(contact.phone);
   const paused = !!contact.botPausedUntil && contact.botPausedUntil > now;
@@ -139,7 +178,10 @@ function Card({ contact, stage, slug, now }: { contact: BoardContact; stage: Sta
         </p>
       )}
       <div className="card-foot">
-        <StageSelect slug={slug} contactId={contact.id} stage={stage} name={name} />
+        <StageSelect slug={slug} contactId={contact.id} stage={stage} name={name} canPostventa={contact.hasDeliveredOrder} />
+        {stage === "venta" && (
+          <CreateOrderButton slug={slug} contactId={contact.id} contactName={name} products={products} today={today} />
+        )}
         {paused && <ReactivateButton slug={slug} contactId={contact.id} />}
       </div>
     </article>

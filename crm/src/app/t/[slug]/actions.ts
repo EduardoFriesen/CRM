@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { reactivateBot, setContactStage } from "@/contacts/contacts";
+import { cancelOrder, createOrder, deliverOrder, type OrderView } from "@/orders/orders";
 import type { Result } from "@/lib/result";
 import type { Stage } from "@/db/schema";
 import { getCurrentTenant } from "@/tenants/tenants";
@@ -17,5 +18,31 @@ export async function reactivateAction(slug: string, contactId: string): Promise
   const tenant = await getCurrentTenant(slug);
   const result = await reactivateBot(tenant.id, contactId);
   if (result.success) revalidatePath(`/t/${tenant.slug}`);
+  return result;
+}
+
+const revalidateOrders = (slug: string) => {
+  revalidatePath(`/t/${slug}`);
+  revalidatePath(`/t/${slug}/catalogo`);
+};
+
+export async function createOrderAction(slug: string, input: unknown): Promise<Result<OrderView>> {
+  const tenant = await getCurrentTenant(slug);
+  const result = await createOrder(tenant.id, input);
+  if (result.success) revalidateOrders(tenant.slug);
+  return result;
+}
+
+export async function deliverOrderAction(slug: string, id: string): Promise<Result<OrderView>> {
+  const tenant = await getCurrentTenant(slug);
+  const result = await deliverOrder(tenant.id, id);
+  if (result.success) revalidateOrders(tenant.slug);
+  return result;
+}
+
+export async function cancelOrderAction(slug: string, id: string): Promise<Result<OrderView>> {
+  const tenant = await getCurrentTenant(slug);
+  const result = await cancelOrder(tenant.id, id);
+  if (result.success) revalidateOrders(tenant.slug);
   return result;
 }
