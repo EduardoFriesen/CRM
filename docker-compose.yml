@@ -88,7 +88,8 @@ services:
   nginx:
     image: nginx:1.30.7-alpine
     restart: unless-stopped
-    depends_on: [evolution-api, crm]
+    # No depends_on: upstreams resolve per request (Docker DNS), so a failed crm or
+    # evolution start only 502s its own host instead of keeping nginx down.
     ports:
       - "127.0.0.1:${HTTP_PORT:-8080}:80"
     volumes:

@@ -38,9 +38,12 @@ En esta entrega el bot **no responde**: la IA vuelve en la entrega 2, dentro del
 Base de datos: la app usa la base `crm` con dos roles. `crm` es el dueno y solo lo usa el servicio `crm-migrate` (aplica migraciones y termina); `crm_app` es el que usa la app y esta sujeto a Row Level Security por negocio. En un volumen de Postgres que ya existia, crea la base y los roles una vez:
 
 ```bash
+docker compose up -d postgres   # recrea postgres con CRM_DB_PASSWORD/CRM_APP_DB_PASSWORD (los datos quedan en el volumen)
 docker compose exec -T postgres bash /docker-entrypoint-initdb.d/02-create-crm-db.sh   # idempotente
 docker compose up -d --build
 ```
+
+Antes, agrega `CRM_DB_PASSWORD` y `CRM_APP_DB_PASSWORD` al `.env` (`openssl rand -hex 32`). Si `crm-migrate` falla, `crm` no arranca pero Evolution sigue accesible.
 
 El webhook (`/api/webhooks/evolution/<instancia>`) solo es accesible por la red interna de Docker; nginx devuelve 404. Si cambias `nginx/nginx.conf`, reinicia nginx (`docker compose restart nginx`).
 
