@@ -1,23 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Result } from "@/lib/result";
 import type { ConnectionView } from "@/whatsapp/connect";
 import { connectWhatsApp } from "./actions";
 
 const POLL_MS = 3000;
+const UNREACHABLE: Result<ConnectionView> = {
+  success: false,
+  error: { code: "NETWORK", message: "No pudimos hablar con WhatsApp, reintentá en unos segundos." },
+};
+
+// A rejected server action (network blip, server restart) becomes an error state, not a frozen panel.
+async function load(slug: string): Promise<Result<ConnectionView>> {
+  try {
+    return await connectWhatsApp(slug);
+  } catch {
+    return UNREACHABLE;
+  }
+}
 
 export function WhatsAppPanel({ slug }: { slug: string }) {
   const [state, setState] = useState<Result<ConnectionView> | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
-  const refresh = useCallback(async () => setState(await connectWhatsApp(slug)), [slug]);
+  const retry = () => {
+    setState(null);
+    setAttempt((n) => n + 1);
+  };
 
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
-      const next = await connectWhatsApp(slug);
+      const next = await load(slug);
       if (!active) return;
       setState(next);
       if (next.success && next.data.status !== "open") timer = setTimeout(tick, POLL_MS);
@@ -27,7 +44,7 @@ export function WhatsAppPanel({ slug }: { slug: string }) {
       active = false;
       clearTimeout(timer);
     };
-  }, [slug]);
+  }, [slug, attempt]);
 
   if (!state) {
     return (
@@ -42,7 +59,7 @@ export function WhatsAppPanel({ slug }: { slug: string }) {
     return (
       <div className="wa-panel" role="alert">
         <p>{state.error.message}</p>
-        <button type="button" onClick={() => void refresh()}>
+        <button type="button" onClick={retry}>
           Reintentar
         </button>
       </div>

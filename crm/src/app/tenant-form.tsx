@@ -13,7 +13,8 @@ const fields = [
 
 export function TenantForm() {
   const [state, action, pending] = useActionState<CreateTenantState, FormData>(createTenantAction, null);
-  const errors: FieldErrors = state && !state.success ? ((state.error.details as FieldErrors) ?? {}) : {};
+  const result = state?.result;
+  const errors: FieldErrors = result && !result.success ? ((result.error.details as FieldErrors) ?? {}) : {};
 
   return (
     <form action={action} className="tenant-form" aria-describedby="tenant-form-status">
@@ -24,6 +25,7 @@ export function TenantForm() {
             id={f.name}
             name={f.name}
             required
+            defaultValue={state?.values[f.name]}
             aria-invalid={errors[f.name] ? true : undefined}
             aria-describedby={`${f.name}-hint`}
           />
@@ -34,7 +36,7 @@ export function TenantForm() {
         {pending ? "Creando…" : "Crear negocio"}
       </button>
       <p id="tenant-form-status" role="status">
-        {state?.success ? `Listo: ${state.data.name} creado.` : state ? state.error.message : ""}
+        {result?.success ? `Listo: ${result.data.name} creado.` : result ? result.error.message : ""}
       </p>
     </form>
   );
