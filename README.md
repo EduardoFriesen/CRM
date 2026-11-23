@@ -1,11 +1,10 @@
 # CRM - Bot de WhatsApp con IA
 
-Stack Docker Compose: Evolution API v2.3.7 (WhatsApp) + Postgres 17 + Redis 8 + nginx como proxy. El bot con IA se reconstruye dentro de la app del CRM (entrega 2); por ahora **no responde mensajes**.
+Stack Docker Compose: app CRM (Next.js) + Evolution API v2.3.7 (WhatsApp) + Postgres 17 + Redis 8 + nginx como proxy. El bot con IA se reconstruye dentro de la app del CRM (entrega 2); por ahora **no responde mensajes**.
 
 ## Requisitos
 
 - Docker con Compose v2, `openssl`, `curl`.
-- Una clave de API de un proveedor de modelos (Anthropic, OpenAI, etc.) para el chatflow.
 - Un numero de WhatsApp **dedicado** (ver advertencias).
 
 ## Puesta en marcha
@@ -20,8 +19,30 @@ docker compose up -d
 - Usa siempre `openssl rand -hex 32` (solo hex): la clave de Postgres se interpola sin codificar en una URI de conexion y caracteres como `@ / :` la rompen. Nunca dejes `change-me`: compose solo falla si una variable esta sin definir o vacia, **no detecta** el valor `change-me`.
 - Las claves de base de datos solo se aplican cuando el volumen de Postgres esta vacio. Si las cambias despues, hay que ejecutar `docker compose down -v` (**borra TODOS los datos**, incluidas las instancias de WhatsApp) o hacer `ALTER ROLE` a mano.
 - URLs locales (nginx escucha en `127.0.0.1:${HTTP_PORT}`, default 8080, porque Docker rootless no puede usar el puerto 80):
+  - CRM: http://crm.localhost:8080
   - Evolution: http://evolution.localhost:8080
   - En un VPS con Docker como root podes poner `HTTP_PORT=80`.
+
+## App CRM
+
+> **La app no tiene login todavia (llega con Keycloak).** Cualquiera que llegue a `crm.localhost` ve y modifica todos los negocios. Por eso nginx la publica solo en `127.0.0.1`: **no la expongas a una red ni a internet hasta que exista el login.**
+
+Flujo:
+
+1. En http://crm.localhost:8080 crea el negocio (nombre, identificador para la URL y WhatsApp del administrador).
+2. Entra al negocio > **WhatsApp** y escanea el QR desde el telefono del negocio (Dispositivos vinculados). La app crea la instancia en Evolution con un webhook propio y un secreto por instancia.
+3. Cada mensaje que recibe o envia ese numero aparece en **Clientes**, en la columna Consulta. Tocar la tarjeta abre el chat en `wa.me` (con la cuenta de WhatsApp que tengas abierta en ese dispositivo); la etapa se cambia con el selector de la tarjeta.
+
+En esta entrega el bot **no responde**: la IA vuelve en la entrega 2, dentro del CRM.
+
+Base de datos: la app usa la base `crm` con dos roles. `crm` es el dueno y solo lo usa el servicio `crm-migrate` (aplica migraciones y termina); `crm_app` es el que usa la app y esta sujeto a Row Level Security por negocio. En un volumen de Postgres que ya existia, crea la base y los roles una vez:
+
+```bash
+docker compose exec -T postgres bash /docker-entrypoint-initdb.d/02-create-crm-db.sh   # idempotente
+docker compose up -d --build
+```
+
+El webhook (`/api/webhooks/evolution/<instancia>`) solo es accesible por la red interna de Docker; nginx devuelve 404. Si cambias `nginx/nginx.conf`, reinicia nginx (`docker compose restart nginx`).
 
 ## Tests
 
@@ -31,7 +52,21 @@ bash tests/smoke.sh         # levanta el stack y prueba el proxy (lo deja corrie
 bash tests/db-isolation.sh  # requiere postgres healthy; verifica aislamiento entre bases
 ```
 
-## 1. Crear la instancia de WhatsApp y escanear el QR
+App CRM (requiere Node 24 y Postgres publicado en `127.0.0.1:55432` solo para desarrollo):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+cd crm && npm ci
+npx vitest run            # unitarios + integracion (aplica migraciones con el rol crm)
+npx playwright install chromium && npx playwright test   # E2E contra next dev en localhost:3100
+npm run lint && npm run typecheck
+```
+
+Los tests leen las claves de `../.env` y arman las URLs de la base; se pueden pisar con `CRM_TEST_OWNER_URL` y `CRM_TEST_APP_URL`. Crean negocios con slugs aleatorios y los borran al terminar.
+
+## 1. (Sin la app) Crear una instancia de WhatsApp a mano
+
+Lo normal es conectar el numero desde la app (ver arriba). Una instancia creada a mano no manda mensajes al CRM porque no tiene el webhook configurado.
 
 Las rutas se verificaron contra el codigo de Evolution en el tag 2.3.7 (`instance.router.ts`, `instance.dto.ts`).
 
@@ -53,7 +88,10 @@ La respuesta trae el QR (`base64`, y `code`). Escanealo desde WhatsApp > Disposi
 
 No se ejecuto automaticamente; completar y registrar el resultado en la descripcion del PR:
 
-- [ ] Escanear el QR con el numero dedicado.
+- [ ] Crear un negocio en http://crm.localhost:8080.
+- [ ] Desde el negocio > WhatsApp, escanear el QR con el numero dedicado.
+- [ ] Escribirle desde otro telefono: aparece la tarjeta en Consulta con el ultimo mensaje.
+- [ ] Tocar la tarjeta abre `wa.me` con ese numero; moverla a Venta con el selector.
 - [ ] Escribir en un grupo donde este el numero: no debe responder.
 - [ ] Reiniciar el stack (`docker compose restart`) y confirmar que la instancia sigue conectada.
 
@@ -61,6 +99,7 @@ No se ejecuto automaticamente; completar y registrar el resultado en la descripc
 
 - **Riesgo de baneo:** Baileys es un cliente no oficial de WhatsApp Web. Usa un numero dedicado, no el personal ni el de un negocio establecido.
 - Evolution **no guarda historial de mensajes** (`DATABASE_SAVE_DATA_NEW_MESSAGE=false`).
+- **Datos personales (Ley 25.326):** el CRM guarda contactos (nombre, telefono) y el texto de los mensajes en la base `crm`. La retencion configurable, la exportacion y el borrado por contacto estan planificados (ver `docs/superpowers/specs/2026-11-23-crm-platform-design.md`) y **todavia no estan implementados**. El CRM no loguea mensajes ni telefonos.
 - **Logs con datos personales:** Evolution hace un `console.log` incondicional de cada mensaje, asi que los logs del contenedor `evolution-api` **SI contienen mensajes y numeros de telefono**, sin importar `LOG_LEVEL`. Se rotan (3 archivos x 10 MB, tope ~30 MB). Para purgarlos: `docker compose rm -sf evolution-api && docker compose up -d evolution-api` (recrear el contenedor borra sus logs).
 - Todo queda en `127.0.0.1`; para exponerlo hace falta HTTPS delante.
 
