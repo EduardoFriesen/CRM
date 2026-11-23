@@ -60,6 +60,13 @@ Antes, agrega `CRM_DB_PASSWORD` y `CRM_APP_DB_PASSWORD` al `.env` (`openssl rand
 
 El webhook (`/api/webhooks/evolution/<instancia>`) solo es accesible por la red interna de Docker; nginx devuelve 404. Si cambias `nginx/nginx.conf`, reinicia nginx (`docker compose restart nginx`).
 
+## Pedidos
+
+- Se crean desde la tarjeta de un cliente en **Venta** (botón **Crear pedido**): productos del catálogo con cantidad, fecha de entrega y datos de envío. El total sale de los precios del catálogo, que quedan congelados en el pedido.
+- **Descuentan stock** al guardarse; si algún producto no alcanza, el pedido no se guarda y dice cuántos quedan. Los productos sin control de stock no se descuentan. **Cancelar** devuelve el stock.
+- **Marcar entregado** pasa al cliente a **Postventa**. Sin un pedido entregado nadie puede llevar a un cliente a Postventa: ni el selector de la tarjeta ni el bot.
+- Los pedidos pendientes se ven abajo del tablero de Clientes (Atrasados · Hoy · Mañana · Próximos); "Ver entregados y cancelados" muestra los últimos 50. Los pedidos no se borran: se cancelan.
+
 ## Tests
 
 ```bash
@@ -114,6 +121,7 @@ No se ejecuto automaticamente; completar y registrar el resultado en la descripc
 - [ ] Decirle que lo querés comprar: la tarjeta pasa a Venta.
 - [ ] Preguntar algo que no está cargado: al WhatsApp del admin llega la consulta; responderla citando el mensaje; el cliente recibe la respuesta; volver a preguntar lo mismo y que conteste sin consultar.
 - [ ] Preguntar un precio que no está en el catálogo: consulta siempre (no aprende).
+- [ ] Crear un pedido desde un cliente en Venta: baja el stock en Catálogo; marcarlo entregado: el cliente pasa a Postventa; cancelar otro: el stock vuelve.
 - [ ] "Lo quiero comprar, ¿cómo pago?": llega el aviso de traspaso, la tarjeta muestra "Bot pausado" y "Reactivar bot" la reactiva.
 - [ ] Escribir en un grupo donde este el numero: no debe responder.
 - [ ] Reiniciar el stack (`docker compose restart`) y confirmar que la instancia sigue conectada.
