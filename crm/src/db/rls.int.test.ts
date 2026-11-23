@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { getDb, withTenant } from "@/db/client";
-import { contacts } from "@/db/schema";
+import { contacts, messages, whatsappInstances } from "@/db/schema";
 import { dropTenants, makeContact, makeInstance, makeTenant, ownerSql } from "@/test/db";
 
 afterAll(async () => {
@@ -46,6 +46,22 @@ describe("tenant row-level security", () => {
     const a = await makeTenant();
     await makeContact(a.id);
     await expect(withTenant(a.id, (tx) => tx.delete(contacts))).rejects.toMatchObject({
+      cause: { message: expect.stringMatching(/permission denied/) },
+    });
+  });
+
+  it("app role cannot update messages", async () => {
+    const a = await makeTenant();
+    await expect(withTenant(a.id, (tx) => tx.update(messages).set({ body: "x" }))).rejects.toMatchObject({
+      cause: { message: expect.stringMatching(/permission denied/) },
+    });
+  });
+
+  it("app role can only update status and secret_hash of an instance", async () => {
+    const a = await makeTenant();
+    await makeInstance(a.id, a.slug, "h");
+    await withTenant(a.id, (tx) => tx.update(whatsappInstances).set({ status: "open", secretHash: "h2" }));
+    await expect(withTenant(a.id, (tx) => tx.update(whatsappInstances).set({ name: "other" }))).rejects.toMatchObject({
       cause: { message: expect.stringMatching(/permission denied/) },
     });
   });
