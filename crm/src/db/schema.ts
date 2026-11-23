@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, integer, numeric, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, integer, numeric, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 export const STAGES = ["consulta", "venta", "postventa"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -152,3 +152,44 @@ export const businessFacts = pgTable("business_facts", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export type BusinessFact = typeof businessFacts.$inferSelect;
+
+export const ORDER_STATUSES = ["pending", "delivered", "cancelled"] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+export const orderStatus = pgEnum("order_status", ORDER_STATUSES);
+
+export const orders = pgTable("orders", {
+  id: uuid().primaryKey().defaultRandom(),
+  tenantId: tenantId(),
+  contactId: uuid("contact_id")
+    .notNull()
+    .references(() => contacts.id, { onDelete: "cascade" }),
+  status: orderStatus().notNull().default("pending"),
+  deliveryDate: date("delivery_date").notNull(),
+  address: text().notNull(),
+  locality: text().notNull().default(""),
+  notes: text().notNull().default(""),
+  total: numeric({ precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+});
+export type Order = typeof orders.$inferSelect;
+
+export const orderItems = pgTable(
+  "order_items",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tenantId: tenantId(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    // Kept (as null) when the product is deleted; name and price are copies.
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    productName: text("product_name").notNull(),
+    unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
+    quantity: integer().notNull(),
+    lineTotal: numeric("line_total", { precision: 12, scale: 2 }).notNull(),
+  },
+  (t) => [check("order_items_quantity_check", sql`${t.quantity} > 0`)],
+);
+export type OrderItem = typeof orderItems.$inferSelect;
