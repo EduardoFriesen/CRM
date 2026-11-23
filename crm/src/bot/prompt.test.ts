@@ -37,6 +37,35 @@ describe("buildSystemPrompt", () => {
   });
 });
 
+describe("learned facts and 2b rules", () => {
+  it("puts learned facts inside the business block", () => {
+    const p = buildSystemPrompt({ ...base, facts: [{ question: "¿Envían a Pilar?", answer: "Sí, los martes" }] });
+    const open = p.indexOf("<negocio>");
+    const fact = p.indexOf("Sí, los martes");
+    expect(p).toContain("Preguntas ya respondidas por el equipo");
+    expect(fact).toBeGreaterThan(open);
+    expect(fact).toBeLessThan(p.indexOf("</negocio>"));
+  });
+
+  it("caps learned facts at 8000 characters keeping the first (newest) ones", () => {
+    const facts = Array.from({ length: 300 }, (_, i) => ({ question: `pregunta ${i}`, answer: "x".repeat(80) }));
+    const p = buildSystemPrompt({ ...base, facts });
+    const section = p.slice(p.indexOf("Preguntas ya respondidas"), p.indexOf("</negocio>"));
+    expect(section.length).toBeLessThanOrEqual(8000 + 100);
+    expect(section).toContain("pregunta 0");
+    expect(section).not.toContain("pregunta 299");
+  });
+
+  it("tells the model to ask the admin and to hand off, before the business data", () => {
+    const p = buildSystemPrompt(base);
+    const open = p.indexOf("<negocio>");
+    for (const needle of ["ask_admin", "is_price", "handoff_to_admin", "lo consulto y te aviso"]) {
+      expect(p.indexOf(needle)).toBeGreaterThanOrEqual(0);
+      expect(p.indexOf(needle)).toBeLessThan(open);
+    }
+  });
+});
+
 describe("truncateForWhatsApp", () => {
   it("cuts at the last sentence end before the limit", () => {
     const out = truncateForWhatsApp("a".repeat(1400) + ". " + "b".repeat(300));
