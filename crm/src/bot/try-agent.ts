@@ -36,7 +36,10 @@ export async function tryAgent(
     const model = deps.model ?? (await createModel(rt));
     const reply = await generateAgentText(model, {
       system,
-      messages: parsed.data.map((m) => ({ role: m.role, content: m.text })),
+      // Providers expect the conversation to open with the user.
+      messages: parsed.data
+        .slice(Math.max(0, parsed.data.findIndex((m) => m.role === "user")))
+        .map((m) => ({ role: m.role, content: m.text })),
       tools: makeTools(tenantId, "", { dryRun: true, onStage: (s) => (stage = s) }),
     });
     return ok({ reply: truncateForWhatsApp(reply.trim()), stage });

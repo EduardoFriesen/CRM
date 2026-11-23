@@ -49,8 +49,12 @@ export const createModel: ModelFactory = async (s) => {
   }
 };
 
+// Gemini answers a bad key with 400 INVALID_ARGUMENT / API_KEY_INVALID instead of 401.
 export const isAuthError = (e: unknown): boolean =>
-  APICallError.isInstance(e) && (e.statusCode === 401 || e.statusCode === 403);
+  APICallError.isInstance(e) &&
+  (e.statusCode === 401 ||
+    e.statusCode === 403 ||
+    (e.statusCode === 400 && /API_KEY_INVALID|API key not valid/i.test(`${e.responseBody ?? ""} ${e.message}`)));
 
 export async function verifyKey(s: ModelSettings, build: ModelFactory = createModel): Promise<KeyStatus> {
   try {

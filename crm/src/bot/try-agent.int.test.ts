@@ -45,6 +45,16 @@ describe("tryAgent", () => {
     expect(await tryAgent(t.id, [{ role: "user", text: "Hola" }], { model })).toMatchObject({ success: true });
   });
 
+  it("opens the model history with a user turn", async () => {
+    const t = await makeTenant();
+    await saveAgentConfig(t.id, { agentName: "Sofi", provider: "anthropic", model: "m", apiKey: "sk-1234" }, async () => "valid");
+    const model = new MockLanguageModelV4({
+      doGenerate: { content: [{ type: "text", text: "ok" }], finishReason: { unified: "stop", raw: undefined }, usage, warnings: [] },
+    });
+    await tryAgent(t.id, [{ role: "assistant", text: "Hola" }, { role: "user", text: "¿Precio?" }], { model });
+    expect(model.doGenerateCalls[0].prompt.filter((m) => m.role !== "system")[0].role).toBe("user");
+  });
+
   it("rejects an oversized history", async () => {
     const t = await makeTenant();
     const history = Array.from({ length: 21 }, () => ({ role: "user" as const, text: "hola" }));

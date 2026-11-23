@@ -47,4 +47,8 @@ describe("truncateForWhatsApp", () => {
     expect(truncateForWhatsApp("x".repeat(2000))).toHaveLength(1500);
   });
   it("leaves short text alone", () => expect(truncateForWhatsApp("Hola")).toBe("Hola"));
+  it("never cuts inside a price written with a thousands dot", () => {
+    const out = truncateForWhatsApp("Primera frase. " + "x".repeat(1470) + " sale $12.500 el kilo");
+    expect(out).toBe("Primera frase.");
+  });
 });

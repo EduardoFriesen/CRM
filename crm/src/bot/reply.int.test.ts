@@ -139,10 +139,66 @@ describe("runConversation", () => {
     await say(t.id, c.id, "customer", "Hola");
     const model = new MockLanguageModelV4({
       doGenerate: async () => {
-        throw new APICallError({ message: "overloaded", url: "https://x", requestBodyValues: {}, statusCode: 529, isRetryable: false });
+        throw new APICallError({ message: "overloaded", url: "https://x", requestBodyValues: {}, statusCode: 529, isRetryable: true });
       },
     });
     await expect(runConversation(t.id, c.id, { model, send: sendOk() })).rejects.toThrow();
     expect((await getAgentView(t.id))?.lastErrorCode).toBe("HTTP_529");
+  });
+
+  it("still answers a message the customer sent while the previous reply was being generated", async () => {
+    const { t, c } = await setup();
+    await say(t.id, c.id, "customer", "Hola", 1);
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        await say(t.id, c.id, "customer", "Ah, y ¿hacen envíos?");
+        return text("¡Hola!");
+      },
+    });
+    expect(await runConversation(t.id, c.id, { model, send: sendOk() })).toBe("sent");
+    expect(
+      await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("Sí, hacemos envíos") }), send: sendOk() }),
+    ).toBe("sent");
+  });
+
+  it("does not send if the admin answered while the reply was being generated", async () => {
+    const { t, c } = await setup();
+    await say(t.id, c.id, "customer", "Hola", 1);
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        await say(t.id, c.id, "admin", "Hola Ana, te atiendo yo");
+        return text("¡Hola!");
+      },
+    });
+    const send = sendOk();
+    expect(await runConversation(t.id, c.id, { model, send })).toBe("skipped:not-customer-last");
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("starts the model history with a customer turn even when the window opens with the bot", async () => {
+    const { t, c } = await setup();
+    for (let i = 0; i < 12; i++) {
+      await say(t.id, c.id, "customer", `pregunta ${i}`, 60 + 24 - 2 * i);
+      await say(t.id, c.id, "bot", `respuesta ${i}`, 60 + 23 - 2 * i);
+    }
+    await say(t.id, c.id, "customer", "última", 0);
+    const model = new MockLanguageModelV4({ doGenerate: text("ok") });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    const roles = model.doGenerateCalls[0].prompt.map((m) => m.role).filter((r) => r !== "system");
+    expect(roles[0]).toBe("user");
+  });
+
+  it("does not retry permanent model errors and records them", async () => {
+    const { t, c } = await setup();
+    await say(t.id, c.id, "customer", "Hola");
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new APICallError({ message: "model not found", url: "https://x", requestBodyValues: {}, statusCode: 404, isRetryable: false });
+      },
+    });
+    const send = sendOk();
+    expect(await runConversation(t.id, c.id, { model, send })).toBe("skipped:model-error");
+    expect(send).not.toHaveBeenCalled();
+    expect((await getAgentView(t.id))?.lastErrorCode).toBe("HTTP_404");
   });
 });

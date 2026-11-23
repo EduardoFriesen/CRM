@@ -1,4 +1,4 @@
-import { APICallError, generateText, isStepCount, type LanguageModel, type ModelMessage, type ToolSet } from "ai";
+import { APICallError, generateText, isStepCount, RetryError, type LanguageModel, type ModelMessage, type ToolSet } from "ai";
 import { and, desc, eq, gt, max, sql } from "drizzle-orm";
 import { getAgentRuntime, markKeyInvalid, recordAgentError } from "@/agent/config";
 import { createModel, isAuthError } from "@/agent/model";
@@ -19,13 +19,16 @@ export type ConversationOutcome =
   | "skipped:not-customer-last"
   | "skipped:rate-limit"
   | "skipped:key-invalid"
-  | "skipped:empty";
+  | "skipped:empty"
+  | "skipped:model-error";
 
+// Cuts at the last sentence end (". ") or line break before the limit. A bare "." is not
+// a boundary: es-AR prices use it for thousands ("$12.500").
 export function truncateForWhatsApp(text: string, maxLength = WHATSAPP_MAX): string {
   if (text.length <= maxLength) return text;
   const cut = text.slice(0, maxLength);
-  const end = cut.lastIndexOf(".");
-  return end > 0 ? cut.slice(0, end + 1) : cut;
+  const end = Math.max(cut.lastIndexOf(". ") + 1, cut.lastIndexOf("\n"));
+  return end > 0 ? cut.slice(0, end).trimEnd() : cut;
 }
 
 export async function generateAgentText(
@@ -37,6 +40,7 @@ export async function generateAgentText(
 }
 
 export function errorCode(e: unknown): string {
+  if (RetryError.isInstance(e)) return errorCode(e.lastError);
   if (APICallError.isInstance(e)) return `HTTP_${e.statusCode ?? "NETWORK"}`;
   if (e instanceof EvolutionError) return `EVOLUTION_${e.status}`;
   const err = e as { code?: unknown; name?: unknown } | null;
@@ -49,7 +53,7 @@ async function loadConversation(tenantId: string, contactId: string, now: Date) 
     const [instance] = await tx.select().from(whatsappInstances);
     const [tenant] = await tx.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
     const recent = await tx
-      .select({ author: messages.author, body: messages.body })
+      .select({ author: messages.author, body: messages.body, sentAt: messages.sentAt })
       .from(messages)
       .where(eq(messages.contactId, contactId))
       .orderBy(desc(messages.sentAt))
@@ -85,7 +89,9 @@ export async function runConversation(
 
   const introduce = rt.discloseAi && (!conv.lastBotAt || now.getTime() - conv.lastBotAt.getTime() > INTRO_GAP_MS);
   const system = buildSystemPrompt({ ...rt, tenantName: conv.tenantName, introduce, now });
-  const history: ModelMessage[] = conv.recent.map((m) => ({
+  // Providers expect the conversation to open with the user: drop leading bot/admin turns.
+  const firstCustomer = conv.recent.findIndex((m) => m.author === "customer");
+  const history: ModelMessage[] = conv.recent.slice(firstCustomer).map((m) => ({
     role: m.author === "customer" ? "user" : "assistant",
     content: m.body,
   }));
@@ -100,11 +106,25 @@ export async function runConversation(
       await markKeyInvalid(tenantId);
       return "skipped:key-invalid";
     }
+    // Permanent errors (bad request, unknown model…) are recorded, not retried.
+    if (APICallError.isInstance(e) && !e.isRetryable) return "skipped:model-error";
     throw e;
   }
 
   const text = truncateForWhatsApp(reply.trim());
   if (!text) return "skipped:empty";
+
+  // The reply covers messages up to `cutoff`. If the admin wrote meanwhile, don't talk
+  // over them; a customer message newer than the cutoff gets its own follow-up job.
+  const cutoff = conv.recent.at(-1)!.sentAt;
+  const [adminSince] = await withTenant(tenantId, (tx) =>
+    tx
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.contactId, contactId), eq(messages.author, "admin"), gt(messages.sentAt, cutoff)))
+      .limit(1),
+  );
+  if (adminSince) return "skipped:not-customer-last";
 
   let sent: { id: string };
   try {
@@ -114,6 +134,7 @@ export async function runConversation(
     throw e;
   }
 
+  const repliedAt = new Date(cutoff.getTime() + 1);
   // The webhook's fromMe echo may already have stored this id as "admin": claim it.
   await withTenant(tenantId, (tx) =>
     tx
@@ -125,9 +146,11 @@ export async function runConversation(
         author: "bot",
         body: text,
         waMessageId: sent.id,
-        sentAt: new Date(),
+        // Placed right after the last message the reply saw, so a customer message that
+        // arrived during generation stays "last" and is answered by the follow-up job.
+        sentAt: repliedAt,
       })
-      .onConflictDoUpdate({ target: [messages.tenantId, messages.waMessageId], set: { author: "bot" } }),
+      .onConflictDoUpdate({ target: [messages.tenantId, messages.waMessageId], set: { author: "bot", sentAt: repliedAt } }),
   );
   await withTenant(tenantId, (tx) =>
     tx.update(contacts).set({ lastMessageAt: sql`greatest(${contacts.lastMessageAt}, now())` }).where(eq(contacts.id, contactId)),
