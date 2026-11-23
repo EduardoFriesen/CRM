@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { decrypt, encrypt } from "@/crypto/secret-box";
 import { withTenant } from "@/db/client";
-import { agentConfigs, PROVIDERS, type AgentConfigRow, type KeyStatus, type Provider } from "@/db/schema";
+import { agentConfigs, tenants, PROVIDERS, type AgentConfigRow, type KeyStatus, type Provider } from "@/db/schema";
 import { fail, ok, type Result } from "@/lib/result";
 import { assertSafeBaseUrl, UnsafeBaseUrlError } from "./base-url";
 import { verifyKey, type ModelSettings } from "./model";
@@ -21,6 +21,7 @@ export type AgentView = {
   lastErrorCode: string | null;
   lastErrorAt: Date | null;
   pauseHours: number;
+  adminPhone: string;
 };
 
 export type AgentRuntime = ModelSettings & {
@@ -46,9 +47,18 @@ export const agentInput = z.object({
   apiKey: z.string().trim().max(500).optional(),
   enabled: flag,
   discloseAi: flag,
+  pauseHours: z.preprocess(
+    (v) => (v === undefined || v === "" ? 12 : v),
+    z.coerce.number().int("Tiene que ser un número entero").min(1, "Entre 1 y 168 horas").max(168, "Entre 1 y 168 horas"),
+  ),
+  adminPhone: z
+    .string()
+    .trim()
+    .regex(/^\d{10,15}$/, "Solo dígitos, con código de país (ej. 5491122334455)")
+    .optional(),
 });
 
-const toView = (r: AgentConfigRow): AgentView => ({
+const toView = (r: AgentConfigRow, adminPhone: string): AgentView => ({
   agentName: r.agentName,
   tone: r.tone,
   businessInfo: r.businessInfo,
@@ -62,21 +72,25 @@ const toView = (r: AgentConfigRow): AgentView => ({
   lastErrorCode: r.lastErrorCode,
   lastErrorAt: r.lastErrorAt,
   pauseHours: r.pauseHours,
+  adminPhone,
 });
+
+const loadAdminPhone = async (tenantId: string) =>
+  (await withTenant(tenantId, (tx) => tx.select({ p: tenants.adminPhone }).from(tenants).where(eq(tenants.id, tenantId))))[0]?.p ?? "";
 
 const load = async (tenantId: string) =>
   (await withTenant(tenantId, (tx) => tx.select().from(agentConfigs)))[0] ?? null;
 
 export async function getAgentView(tenantId: string): Promise<AgentView | null> {
   const row = await load(tenantId);
-  return row && toView(row);
+  return row && toView(row, await loadAdminPhone(tenantId));
 }
 
 // Server-only: includes the decrypted API key.
 export async function getAgentRuntime(tenantId: string): Promise<AgentRuntime | null> {
   const row = await load(tenantId);
   if (!row) return null;
-  return { ...toView(row), apiKey: decrypt(row.apiKeyEnc) };
+  return { ...toView(row, await loadAdminPhone(tenantId)), apiKey: decrypt(row.apiKeyEnc) };
 }
 
 export async function isBotActive(tenantId: string): Promise<boolean> {
@@ -93,7 +107,7 @@ export async function saveAgentConfig(
   if (!parsed.success) {
     return fail("VALIDATION", "Revisá la configuración del agente", z.flattenError(parsed.error).fieldErrors);
   }
-  const { apiKey: newKey, baseUrl: rawBaseUrl, ...data } = parsed.data;
+  const { apiKey: newKey, baseUrl: rawBaseUrl, adminPhone, ...data } = parsed.data;
 
   let baseUrl: string | null = null;
   if (data.provider === "openai-compatible") {
@@ -123,14 +137,15 @@ export async function saveAgentConfig(
     keyStatus,
     updatedAt: sql`now()`,
   };
-  const [row] = await withTenant(tenantId, (tx) =>
-    tx
+  const [row] = await withTenant(tenantId, async (tx) => {
+    if (adminPhone) await tx.update(tenants).set({ adminPhone }).where(eq(tenants.id, tenantId));
+    return tx
       .insert(agentConfigs)
       .values({ tenantId, ...values })
       .onConflictDoUpdate({ target: agentConfigs.tenantId, set: values })
-      .returning(),
-  );
-  return ok(toView(row));
+      .returning();
+  });
+  return ok(toView(row, await loadAdminPhone(tenantId)));
 }
 
 export async function markKeyInvalid(tenantId: string): Promise<void> {

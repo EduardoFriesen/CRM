@@ -16,7 +16,7 @@ export default async function AgentPage({ params }: { params: Promise<{ slug: st
         <p className="meta">Cómo responde el bot de {tenant.name} por WhatsApp.</p>
       </div>
       <div className="agent-layout">
-        <AgentForm slug={tenant.slug} view={view} suggestions={MODEL_SUGGESTIONS} />
+        <AgentForm slug={tenant.slug} view={view} suggestions={MODEL_SUGGESTIONS} adminPhone={tenant.adminPhone} />
         <TestChat slug={tenant.slug} configured={view !== null} />
       </div>
     </main>

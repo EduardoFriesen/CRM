@@ -1,6 +1,8 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { z } from "zod";
+import { fail, ok, type Result } from "@/lib/result";
 import { withTenant } from "@/db/client";
-import { businessFacts, contacts, escalations } from "@/db/schema";
+import { businessFacts, contacts, escalations, type BusinessFact } from "@/db/schema";
 import { notifyAdmin, relayConfirmText } from "@/bot/admin-messages";
 import { mentionsMoney } from "@/bot/money-guard";
 import { enqueueRelay } from "@/bot/queue";
@@ -40,4 +42,55 @@ export async function answerEscalation(tenantId: string, quotedId: string, answe
   await enqueueRelay(tenantId, result.id).catch((e) => logCode("enqueue relay", e));
   await notifyAdmin(tenantId, relayConfirmText(result.name, result.price)).catch((e) => logCode("admin confirm", e));
   return "answered";
+}
+
+export function listFacts(tenantId: string): Promise<BusinessFact[]> {
+  return withTenant(tenantId, (tx) => tx.select().from(businessFacts).orderBy(desc(businessFacts.updatedAt)));
+}
+
+const factInput = z.object({
+  question: z.string().trim().min(1, "Escribí la pregunta").max(500, "Máximo 500 caracteres"),
+  answer: z.string().trim().min(1, "Escribí la respuesta").max(2000, "Máximo 2000 caracteres"),
+});
+const factId = z.uuid();
+const NOT_FOUND = "No encontramos ese dato";
+
+export async function updateFact(tenantId: string, id: string, input: unknown): Promise<Result<BusinessFact>> {
+  if (!factId.safeParse(id).success) return fail("NOT_FOUND", NOT_FOUND);
+  const parsed = factInput.safeParse(input);
+  if (!parsed.success) return fail("VALIDATION", "Revisá el dato", z.flattenError(parsed.error).fieldErrors);
+  // Learned answers never hold prices, not even through a manual edit.
+  if (mentionsMoney(`${parsed.data.question} ${parsed.data.answer}`)) return fail("VALIDATION", "Los precios van en el catálogo");
+  const [row] = await withTenant(tenantId, (tx) =>
+    tx
+      .update(businessFacts)
+      .set({ ...parsed.data, updatedAt: sql`now()` })
+      .where(and(eq(businessFacts.id, id), eq(businessFacts.tenantId, tenantId)))
+      .returning(),
+  );
+  return row ? ok(row) : fail("NOT_FOUND", NOT_FOUND);
+}
+
+export async function deleteFact(tenantId: string, id: string): Promise<Result<{ id: string }>> {
+  if (!factId.safeParse(id).success) return fail("NOT_FOUND", NOT_FOUND);
+  const [row] = await withTenant(tenantId, (tx) =>
+    tx
+      .delete(businessFacts)
+      .where(and(eq(businessFacts.id, id), eq(businessFacts.tenantId, tenantId)))
+      .returning({ id: businessFacts.id }),
+  );
+  return row ? ok(row) : fail("NOT_FOUND", NOT_FOUND);
+}
+
+export type PendingQuestion = { id: string; question: string; contactName: string | null; createdAt: Date };
+
+export function listPendingEscalations(tenantId: string): Promise<PendingQuestion[]> {
+  return withTenant(tenantId, (tx) =>
+    tx
+      .select({ id: escalations.id, question: escalations.question, contactName: contacts.name, createdAt: escalations.createdAt })
+      .from(escalations)
+      .innerJoin(contacts, eq(contacts.id, escalations.contactId))
+      .where(eq(escalations.status, "pending"))
+      .orderBy(asc(escalations.createdAt)),
+  );
 }

@@ -9,6 +9,7 @@ export function TenantNav({ slug }: { slug: string }) {
     { href: `/t/${slug}`, label: "Clientes" },
     { href: `/t/${slug}/catalogo`, label: "Catálogo" },
     { href: `/t/${slug}/agente`, label: "Agente" },
+    { href: `/t/${slug}/aprendido`, label: "Aprendido" },
     { href: `/t/${slug}/whatsapp`, label: "WhatsApp" },
   ];
   return (

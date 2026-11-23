@@ -17,6 +17,8 @@ export type AgentFormValues = {
   businessInfo: string;
   enabled: boolean;
   discloseAi: boolean;
+  pauseHours: string;
+  adminPhone: string;
 };
 export type AgentFormState = { result: Result<AgentView>; values: AgentFormValues } | null;
 
@@ -32,6 +34,8 @@ export async function saveAgentAction(slug: string, _prev: AgentFormState, form:
     businessInfo: text("businessInfo"),
     enabled: form.get("enabled") === "on",
     discloseAi: form.get("discloseAi") === "on",
+    pauseHours: text("pauseHours"),
+    adminPhone: text("adminPhone"),
   };
   const result = await saveAgentConfig(tenant.id, { ...values, apiKey: text("apiKey") });
   if (result.success) revalidatePath(`/t/${tenant.slug}`, "layout");
@@ -41,7 +45,7 @@ export async function saveAgentAction(slug: string, _prev: AgentFormState, form:
 export async function tryAgentAction(
   slug: string,
   history: TryTurn[],
-): Promise<Result<{ reply: string; stage: Stage | null }>> {
+): Promise<Result<{ reply: string; stage: Stage | null; adminNote: string | null }>> {
   const tenant = await getCurrentTenant(slug);
   return tryAgent(tenant.id, history);
 }

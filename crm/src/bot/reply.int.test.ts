@@ -240,7 +240,7 @@ describe("runConversation", () => {
       const model = new MockLanguageModelV4({
         doGenerate: [toolCall("ask_admin", { question: "¿Abren los domingos?", is_price: false }), text("No tengo ese dato.")],
       });
-      const send = vi.fn(async (_i: string, _jid: string) => ({ id: `X-${Math.random()}` }));
+      const send = vi.fn(async (...[, jid]: [string, string]) => ({ id: `X-${jid}-${Math.random()}` }));
       await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
       expect(send.mock.calls.some(([, jid]) => jid === ADMIN_JID)).toBe(false);
       expect(toolOutput(model)).toContain('"ok":false');

@@ -76,3 +76,15 @@ test("the board says when no agent is configured and links to it", async ({ page
   const link = page.getByRole("link", { name: "Sin agente configurado" });
   await expect(link).toHaveAttribute("href", `/t/${slug}/agente`);
 });
+
+test("a paused card says until when and can be reactivated", async ({ page }) => {
+  const [t] = await sql<{ id: string }[]>`select id from tenants where slug = ${slug}`;
+  await sql`insert into contacts (tenant_id, jid, phone, name, last_message_at, bot_paused_until)
+    values (${t.id}, '5491122999000@s.whatsapp.net', '5491122999000', 'Carla', now(), now() + interval '2 hours')`;
+  await page.goto(`/t/${slug}`);
+  const card = page.getByRole("article").filter({ hasText: "Carla" });
+  await expect(card).toContainText("Bot pausado hasta");
+  await expect(card.getByRole("link").getByRole("button")).toHaveCount(0);
+  await card.getByRole("button", { name: "Reactivar bot" }).click();
+  await expect(card).not.toContainText("Bot pausado hasta");
+});

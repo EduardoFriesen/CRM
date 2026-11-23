@@ -6,7 +6,7 @@ import type { Stage } from "@/db/schema";
 import { STAGE_LABELS } from "../stages";
 import { tryAgentAction } from "./actions";
 
-type Turn = TryTurn & { stage?: Stage | null };
+type Turn = TryTurn & { stage?: Stage | null; adminNote?: string | null };
 
 export function TestChat({ slug, configured }: { slug: string; configured: boolean }) {
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -26,7 +26,7 @@ export function TestChat({ slug, configured }: { slug: string; configured: boole
     start(async () => {
       try {
         const r = await tryAgentAction(slug, history.map(({ role, text: t }) => ({ role, text: t })));
-        if (r.success) setTurns([...history, { role: "assistant" as const, text: r.data.reply, stage: r.data.stage }].slice(-19));
+        if (r.success) setTurns([...history, { role: "assistant" as const, text: r.data.reply, stage: r.data.stage, adminNote: r.data.adminNote }].slice(-19));
         else setError(r.error.message);
       } catch {
         setError("No pudimos hablar con el agente, probá de nuevo.");
@@ -52,6 +52,7 @@ export function TestChat({ slug, configured }: { slug: string; configured: boole
             <span className="visually-hidden">{t.role === "user" ? "Vos: " : "Agente: "}</span>
             {t.text}
             {t.stage && <span className="stage-note">(el bot movería la tarjeta a {STAGE_LABELS[t.stage]})</span>}
+            {t.adminNote && <span className="stage-note">{t.adminNote}</span>}
           </li>
         ))}
         {pending && <li className="bubble assistant typing">Escribiendo…</li>}

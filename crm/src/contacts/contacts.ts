@@ -10,6 +10,7 @@ export type BoardContact = {
   phone: string | null;
   lastMessageAt: Date | null;
   lastMessage: string | null;
+  botPausedUntil: Date | null;
 };
 export type Board = Record<Stage, BoardContact[]>;
 
@@ -22,6 +23,7 @@ export async function listBoard(tenantId: string): Promise<Board> {
         phone: contacts.phone,
         stage: contacts.stage,
         lastMessageAt: contacts.lastMessageAt,
+        botPausedUntil: contacts.botPausedUntil,
         // Columns are qualified by hand: drizzle renders bare names inside sql``, and an
         // unqualified "id" in this subquery would resolve to messages.id.
         lastMessage: sql<string | null>`(
@@ -52,6 +54,20 @@ export async function setContactStage(
       .set({ stage: parsed.data.stage })
       .where(and(eq(contacts.id, parsed.data.contactId), eq(contacts.tenantId, tenantId)))
       .returning({ id: contacts.id, stage: contacts.stage }),
+  );
+  return row ? ok(row) : fail("NOT_FOUND", "No encontramos ese cliente");
+}
+
+const contactId = z.uuid();
+
+export async function reactivateBot(tenantId: string, id: string): Promise<Result<{ id: string }>> {
+  if (!contactId.safeParse(id).success) return fail("NOT_FOUND", "No encontramos ese cliente");
+  const [row] = await withTenant(tenantId, (tx) =>
+    tx
+      .update(contacts)
+      .set({ botPausedUntil: null })
+      .where(and(eq(contacts.id, id), eq(contacts.tenantId, tenantId)))
+      .returning({ id: contacts.id }),
   );
   return row ? ok(row) : fail("NOT_FOUND", "No encontramos ese cliente");
 }

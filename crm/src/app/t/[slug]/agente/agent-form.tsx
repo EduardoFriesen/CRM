@@ -21,7 +21,7 @@ const KEY_STATUS: Record<AgentView["keyStatus"], { text: string; tone: string }>
   invalid: { text: "Key inválida: el proveedor la rechazó. Cargá una nueva.", tone: "bad" },
 };
 
-const fromView = (v: AgentView | null): AgentFormValues => ({
+const fromView = (v: AgentView | null, adminPhone: string): AgentFormValues => ({
   agentName: v?.agentName ?? "",
   provider: v?.provider ?? "anthropic",
   model: v?.model ?? "",
@@ -30,16 +30,20 @@ const fromView = (v: AgentView | null): AgentFormValues => ({
   businessInfo: v?.businessInfo ?? "",
   enabled: v?.enabled ?? false,
   discloseAi: v?.discloseAi ?? true,
+  pauseHours: String(v?.pauseHours ?? 12),
+  adminPhone: v?.adminPhone ?? adminPhone,
 });
 
 export function AgentForm({
   slug,
   view,
   suggestions,
+  adminPhone,
 }: {
   slug: string;
   view: AgentView | null;
   suggestions: Record<Provider, string[]>;
+  adminPhone: string;
 }) {
   const [state, action, saving] = useActionState<AgentFormState, FormData>(
     (prev, form) => saveAgentAction(slug, prev, form),
@@ -49,7 +53,7 @@ export function AgentForm({
   const failed = result && !result.success;
   const errors: FieldErrors = failed ? ((result.error.details as FieldErrors) ?? {}) : {};
   const current = result?.success ? result.data : view;
-  const values = failed ? state.values : fromView(current);
+  const values = failed ? state.values : fromView(current, adminPhone);
   const [provider, setProvider] = useState<string>(values.provider);
   const status = current ? KEY_STATUS[current.keyStatus] : null;
 
@@ -128,6 +132,20 @@ export function AgentForm({
         <label className="check">
           <input type="checkbox" name="discloseAi" defaultChecked={values.discloseAi} /> Presentarse como asistente virtual
         </label>
+        <Field
+          name="adminPhone"
+          label="WhatsApp del administrador"
+          errors={errors}
+          defaultValue={values.adminPhone}
+          hint="Las consultas y avisos de traspaso llegan a este número. Para responder una consulta, citá el mensaje."
+        />
+        <Field
+          name="pauseHours"
+          label="Horas de pausa tras un traspaso"
+          errors={errors}
+          defaultValue={values.pauseHours}
+          hint="Mientras tanto el bot no contesta en esa charla. Se reactiva antes desde la tarjeta."
+        />
         <p className="meta-note">
           El texto de las conversaciones se envía al proveedor de IA que elijas. Contemplalo en la política de privacidad
           de tu negocio.

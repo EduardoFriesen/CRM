@@ -7,6 +7,7 @@ import { STAGES, type Stage } from "@/db/schema";
 import { relativeTime } from "@/lib/time";
 import { getCurrentTenant } from "@/tenants/tenants";
 import { AutoRefresh } from "./auto-refresh";
+import { ReactivateButton } from "./reactivate-button";
 import { StageSelect } from "./stage-select";
 import { STAGE_LABELS } from "./stages";
 
@@ -64,6 +65,14 @@ function BotStatus({ slug, agent }: { slug: string; agent: AgentView | null }) {
   );
 }
 
+const pauseClock = new Intl.DateTimeFormat("es-AR", {
+  timeZone: "America/Argentina/Buenos_Aires",
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
 function Column({ stage, contacts, slug, now }: { stage: Stage; contacts: BoardContact[]; slug: string; now: Date }) {
   const id = `col-${stage}`;
   return (
@@ -89,6 +98,7 @@ function Column({ stage, contacts, slug, now }: { stage: Stage; contacts: BoardC
 function Card({ contact, stage, slug, now }: { contact: BoardContact; stage: Stage; slug: string; now: Date }) {
   const name = contact.name ?? (contact.phone ? `+${contact.phone}` : "Sin nombre");
   const href = waLink(contact.phone);
+  const paused = !!contact.botPausedUntil && contact.botPausedUntil > now;
   const preview = contact.lastMessage === null ? null : messagePreview(contact.lastMessage);
   const body = (
     <>
@@ -123,8 +133,14 @@ function Card({ contact, stage, slug, now }: { contact: BoardContact; stage: Sta
       ) : (
         <div className="card-main">{body}</div>
       )}
+      {paused && (
+        <p className="card-paused">
+          Bot pausado hasta <time dateTime={contact.botPausedUntil!.toISOString()}>{pauseClock.format(contact.botPausedUntil!)}</time>
+        </p>
+      )}
       <div className="card-foot">
         <StageSelect slug={slug} contactId={contact.id} stage={stage} name={name} />
+        {paused && <ReactivateButton slug={slug} contactId={contact.id} />}
       </div>
     </article>
   );

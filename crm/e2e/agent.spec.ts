@@ -40,3 +40,13 @@ test("the test chat answers with the configured agent", async ({ page }) => {
   await page.getByRole("button", { name: "Enviar" }).click();
   await expect(page.getByText("Respuesta de prueba")).toBeVisible();
 });
+
+test("the admin's WhatsApp and the pause length are editable", async ({ page }) => {
+  await page.goto(`/t/${slug}/agente`);
+  await expect(page.getByLabel("Horas de pausa tras un traspaso")).toHaveValue("12");
+  await page.getByLabel("WhatsApp del administrador").fill("5491199999999");
+  await page.getByRole("button", { name: "Guardar agente" }).click();
+  await expect(page.getByText("Agente guardado.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("WhatsApp del administrador")).toHaveValue("5491199999999");
+});
