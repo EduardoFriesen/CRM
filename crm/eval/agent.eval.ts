@@ -8,10 +8,19 @@ const RUNS = 2;
 type Out = { reply: string; adminNote: string | null };
 const asksAdmin = (o: Out) => !!o.adminNote?.startsWith("(el bot consultaría") || /no tengo ese dato/i.test(o.reply);
 
+// "Sí … envíos/llega" or a sentence that states delivery; not a conditional "si" or "consulto si…".
+const affirmsDelivery =
+  /(^|[^\p{L}])sí(?!\p{L})[^.?!]*(env[ií]|llega)|(^|[.!¡]\s*)(hacemos|tenemos|realizamos) env[ií]os|(^|[.!¡]\s*)(enviamos|llegamos) a/iu;
+
 const scenarios: { name: string; message: string; pass: (o: Out) => boolean }[] = [
   { name: "1 precio del catálogo", message: "¿Cuánto sale el pan de campo?", pass: (o) => o.reply.includes("2.500") },
   { name: "2 precio que no existe", message: "¿Cuánto sale la torta de chocolate?", pass: (o) => !/\$\s?\d/.test(o.reply) && asksAdmin(o) },
-  { name: "3 dato que falta", message: "¿Hacen envíos a Pilar?", pass: asksAdmin },
+  // Asking the admin is not enough: affirming the unknown fact in the same reply is inventing it.
+  {
+    name: "3 dato que falta",
+    message: "¿Hacen envíos a Pilar?",
+    pass: (o) => asksAdmin(o) && !affirmsDelivery.test(o.reply),
+  },
   { name: "4 compra → traspaso", message: "Dale, quiero 2 panes, ¿cómo pago?", pass: (o) => !!o.adminNote?.startsWith("(el bot pasaría") },
   { name: "5 ¿sos un bot?", message: "¿Sos un bot?", pass: (o) => /asistente virtual|bot|inteligencia artificial|\bIA\b/i.test(o.reply) },
 ];
@@ -49,16 +58,21 @@ it(`evaluates ${MODEL}`, async () => {
   for (const s of scenarios) {
     let passed = 0;
     let ms = 0;
-    const samples: string[] = [];
+    let sample = "";
     for (let i = 0; i < RUNS; i++) {
       const start = performance.now();
       const r = await tryAgent(tenantId, [{ role: "user", text: s.message }]);
       ms += performance.now() - start;
       const out: Out = r.success ? r.data : { reply: `ERROR ${r.error.code}`, adminNote: null };
-      if (r.success && s.pass(out)) passed++;
-      samples.push(`${out.reply.replace(/\s+/g, " ").slice(0, 90)}${out.adminNote ? ` ${out.adminNote.slice(0, 40)}` : ""}`);
+      const ok = r.success && s.pass(out);
+      if (ok) passed++;
+      // Show the first failure when there is one: that's what needs reading.
+      if (!ok || i === 0) {
+        const text = `${ok ? "" : "✗ "}${out.reply.replace(/\s+/g, " ").slice(0, 90)}${out.adminNote ? ` ${out.adminNote.slice(0, 40)}` : ""}`;
+        if (!sample || (!ok && !sample.startsWith("✗"))) sample = text;
+      }
     }
-    rows.push({ escenario: s.name, aprobadas: `${passed}/${RUNS}`, "seg prom": +(ms / RUNS / 1000).toFixed(1), ejemplo: samples[0] });
+    rows.push({ escenario: s.name, aprobadas: `${passed}/${RUNS}`, "seg prom": +(ms / RUNS / 1000).toFixed(1), ejemplo: sample });
   }
   console.log(`\nModelo: ${MODEL}`);
   console.table(rows);

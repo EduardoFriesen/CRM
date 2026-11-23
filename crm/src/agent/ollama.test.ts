@@ -30,5 +30,8 @@ describe("ollama provider", () => {
     const model = await createModel({ provider: "ollama", model: "qwen3:8b", apiKey: "", baseUrl: "http://evil.example" });
     await generateText({ model, prompt: "hola", maxRetries: 0 });
     expect(String((fetchSpy.mock.calls[0] as unknown[])[0])).toBe("http://127.0.0.1:11434/v1/chat/completions");
+    // Thinking models (qwen3) take 4x longer per reply; a WhatsApp bot can't wait that long.
+    const init = (fetchSpy.mock.calls[0] as unknown[])[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toMatchObject({ reasoning_effort: "none" });
   });
 });

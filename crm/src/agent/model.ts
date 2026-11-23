@@ -56,7 +56,12 @@ export const createModel: ModelFactory = async (s) => {
     case "ollama": {
       const baseURL = ollamaUrl();
       if (!baseURL) throw new Error("OLLAMA_UNAVAILABLE");
-      return createOpenAICompatible({ name: "ollama", baseURL })(s.model);
+      // Thinking off: qwen3 spends 4x longer reasoning per reply; non-thinking models ignore it.
+      return createOpenAICompatible({
+        name: "ollama",
+        baseURL,
+        transformRequestBody: (body) => ({ ...body, reasoning_effort: "none" }),
+      })(s.model);
     }
   }
 };
