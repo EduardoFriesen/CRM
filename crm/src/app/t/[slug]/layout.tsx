@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getCurrentTenant } from "@/tenants/tenants";
+import { TenantNav } from "./tenant-nav";
 
 export default async function TenantLayout({
   children,
@@ -11,18 +12,15 @@ export default async function TenantLayout({
 }) {
   const tenant = await getCurrentTenant((await params).slug);
   return (
-    <div className="tenant-shell">
+    <>
       <header className="tenant-header">
         <Link href="/" className="back">
-          Negocios
+          ← Negocios
         </Link>
         <p className="tenant-name">{tenant.name}</p>
-        <nav aria-label="Secciones del negocio">
-          <Link href={`/t/${tenant.slug}`}>Clientes</Link>
-          <Link href={`/t/${tenant.slug}/whatsapp`}>WhatsApp</Link>
-        </nav>
+        <TenantNav slug={tenant.slug} />
       </header>
       {children}
-    </div>
+    </>
   );
 }
