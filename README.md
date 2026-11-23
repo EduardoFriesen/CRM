@@ -46,6 +46,7 @@ Flujo:
 - **Consultas al admin:** si al bot le falta un dato, se lo pregunta al **WhatsApp del administrador** (se configura en Agente) y al cliente le dice "lo consulto y te aviso". **Respondé citando el mensaje de la consulta**: el bot le transmite la respuesta al cliente con sus palabras y la guarda en **Aprendido** para la próxima vez. **Los precios nunca se aprenden**: si la consulta es de precios o tu respuesta menciona plata, se transmite pero no se guarda (los precios van en el Catálogo). Si no respondés en 2 h, te llega un recordatorio una sola vez. Las consultas pendientes se ven en Aprendido.
 - **Traspaso:** cuando el cliente quiere cerrar la compra, el bot le avisa que lo atiende alguien del equipo, mueve la tarjeta a Venta, te avisa por WhatsApp y se **pausa en esa charla** (12 h por defecto, configurable en Agente). Atendé desde el WhatsApp del negocio. Si escribís vos desde el número del negocio en cualquier charla, también se pausa. La tarjeta muestra "Bot pausado hasta …" y el botón **Reactivar bot**. Los mensajes que llegan durante la pausa no se contestan después.
 - **El número del administrador** nunca aparece como cliente ni recibe respuestas del bot.
+- **Etapas:** **Consulta** es un contacto nuevo o un cliente en Postventa que vuelve a querer comprar (lo detecta el bot, que es lo único que mueve por su cuenta); **Venta** llega solo con el traspaso, cuando hace falta el admin para cerrar; **Postventa** solo con **Marcar entregado**, que además saca la pausa del traspaso y el bot vuelve a atender esa charla.
 - **Diagnóstico:** `docker compose logs crm-worker` muestra por respuesta solo ids, resultado (`sent`, `skipped:...`) y duración; nunca textos ni teléfonos. El último error del bot también aparece en la pantalla Agente.
 
 Base de datos: la app usa la base `crm` con dos roles. `crm` es el dueno y solo lo usa el servicio `crm-migrate` (aplica migraciones y termina); `crm_app` es el que usa la app y esta sujeto a Row Level Security por negocio. En un volumen de Postgres que ya existia, crea la base y los roles una vez:
@@ -59,6 +60,12 @@ docker compose up -d --build
 Antes, agrega `CRM_DB_PASSWORD` y `CRM_APP_DB_PASSWORD` al `.env` (`openssl rand -hex 32`). Si `crm-migrate` falla, `crm` no arranca pero Evolution sigue accesible.
 
 El webhook (`/api/webhooks/evolution/<instancia>`) solo es accesible por la red interna de Docker; nginx devuelve 404. Si cambias `nginx/nginx.conf`, reinicia nginx (`docker compose restart nginx`).
+
+## Consumo de IA
+
+Debajo de la navegación de cada negocio hay una barra con el consumo **del día (hora de Argentina)**: pedidos al modelo, tokens y respuestas enviadas, más el último error del bot. Cuenta todo lo que gasta cuota: respuestas y transmisiones del bot, chat de prueba y verificación de la key (también los pedidos que fallan, que el proveedor cuenta igual).
+
+Los proveedores no informan cuánta cuota queda. Para ver "N de M", cargá en **Agente** el "Límite diario de pedidos" y/o "de tokens" de tu plan: la barra avisa **Cerca del límite** al 80% y **Límite alcanzado** al 100%. Es aproximado: cada proveedor reinicia la cuota en su horario (Google, a medianoche del Pacífico).
 
 ## Pedidos
 
