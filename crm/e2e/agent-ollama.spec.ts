@@ -16,7 +16,7 @@ test.afterAll(async () => {
 });
 
 test("an Ollama agent on a server without Ollama asks for a real provider and key", async ({ page }) => {
-  await page.goto(`/t/${slug}/agente`);
+  await page.goto(`/t/${slug}/configuracion/agente`);
   await expect(page.getByLabel("Proveedor")).toHaveValue("anthropic");
   await expect(page.getByText("Sin API key: usa el Ollama de esta máquina.")).toHaveCount(0);
   const key = page.getByLabel("API key");

@@ -21,7 +21,6 @@ export function TenantNav({ slug }: { slug: string }) {
     { href: `/t/${slug}/clientes`, label: "Clientes" },
     { href: `/t/${slug}/ventas`, label: "Ventas" },
     { href: `/t/${slug}/catalogo`, label: "Catálogo" },
-    { href: `/t/${slug}/agente`, label: "Agente" },
     { href: `/t/${slug}/aprendido`, label: "Aprendido" },
     { href: `/t/${slug}/whatsapp`, label: "WhatsApp" },
     { href: `/t/${slug}/configuracion`, label: "Configuración" },
@@ -29,7 +28,7 @@ export function TenantNav({ slug }: { slug: string }) {
   return (
     <nav aria-label="Secciones del negocio">
       {links.map((l) => (
-        <Link key={l.href} href={l.href} aria-current={path === l.href ? "page" : undefined}>
+        <Link key={l.href} href={l.href} aria-current={path === l.href || (l.href.endsWith("/configuracion") && path.startsWith(`${l.href}/`)) ? "page" : undefined}>
           {l.label}
         </Link>
       ))}

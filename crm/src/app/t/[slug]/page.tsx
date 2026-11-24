@@ -75,7 +75,7 @@ function BotStatus({ slug, agent }: { slug: string; agent: AgentView | null }) {
         ? ["Bot encendido", "ok"]
         : ["Bot apagado", "off"];
   return (
-    <Link href={`/t/${slug}/agente`} className={`bot-status ${tone}`}>
+    <Link href={`/t/${slug}/configuracion/agente`} className={`bot-status ${tone}`}>
       {label}
     </Link>
   );

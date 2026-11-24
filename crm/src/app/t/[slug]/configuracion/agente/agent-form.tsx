@@ -27,6 +27,7 @@ const fromView = (v: AgentView | null, adminPhone: string): AgentFormValues => (
   agentName: v?.agentName ?? "",
   provider: v?.provider ?? "anthropic",
   model: v?.model ?? "",
+  routerModel: v?.routerModel ?? "",
   baseUrl: v?.baseUrl ?? "",
   tone: v?.tone ?? "",
   enabled: v?.enabled ?? false,
@@ -41,12 +42,14 @@ export function AgentForm({
   slug,
   view,
   suggestions,
+  routerSuggestions,
   providers,
   adminPhone,
 }: {
   slug: string;
   view: AgentView | null;
   suggestions: Record<Provider, string[]>;
+  routerSuggestions: Record<Provider, string[]>;
   providers: Provider[];
   adminPhone: string;
 }) {
@@ -94,6 +97,12 @@ export function AgentForm({
         <Field name="model" label="Modelo" errors={errors} defaultValue={values.model} list="model-suggestions" hint="Los modelos chicos inventan más: preferí los sugeridos." />
         <datalist id="model-suggestions">
           {(suggestions[provider as Provider] ?? []).map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+        <Field name="routerModel" label="Modelo rápido" errors={errors} defaultValue={values.routerModel} list="router-suggestions" hint="Opcional. Clasifica las preguntas frecuentes; vacío usa el modelo principal." />
+        <datalist id="router-suggestions">
+          {(routerSuggestions[provider as Provider] ?? []).map((m) => (
             <option key={m} value={m} />
           ))}
         </datalist>

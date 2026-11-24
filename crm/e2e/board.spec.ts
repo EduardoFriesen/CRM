@@ -74,7 +74,7 @@ test("an empty board invites to connect WhatsApp", async ({ page }) => {
 test("the board says when no agent is configured and links to it", async ({ page }) => {
   await page.goto(`/t/${slug}`);
   const link = page.getByRole("link", { name: "Sin agente configurado" });
-  await expect(link).toHaveAttribute("href", `/t/${slug}/agente`);
+  await expect(link).toHaveAttribute("href", `/t/${slug}/configuracion/agente`);
 });
 
 test("a paused card says until when and can be reactivated", async ({ page }) => {

@@ -3,7 +3,7 @@
 import { useState, useTransition, type FormEvent } from "react";
 import type { TryTurn } from "@/bot/try-agent";
 import type { Stage } from "@/db/schema";
-import { STAGE_LABELS } from "../stages";
+import { STAGE_LABELS } from "../../stages";
 import { tryAgentAction } from "./actions";
 
 type Turn = TryTurn & { stage?: Stage | null; adminNote?: string | null };

@@ -11,6 +11,7 @@ export type AgentFormValues = {
   agentName: string;
   provider: string;
   model: string;
+  routerModel: string;
   baseUrl: string;
   tone: string;
   enabled: boolean;
@@ -29,6 +30,7 @@ export async function saveAgentAction(slug: string, _prev: AgentFormState, form:
     agentName: text("agentName"),
     provider: text("provider"),
     model: text("model"),
+    routerModel: text("routerModel"),
     baseUrl: text("baseUrl"),
     tone: text("tone"),
     enabled: form.get("enabled") === "on",

@@ -54,7 +54,7 @@ export async function UsageBar({ tenantId, slug }: { tenantId: string; slug: str
           : "—"}
       </span>
       <span className="usage-note">{NOTE}</span>
-      <Link href={`/t/${slug}/agente`}>Agente</Link>
+      <Link href={`/t/${slug}/configuracion/agente`}>Agente</Link>
     </section>
   );
 }
