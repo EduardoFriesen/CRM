@@ -3,10 +3,10 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { contacts, orders, type Stage } from "@/db/schema";
 import { escapeLike } from "@/lib/like";
+import { optional, PAGE_SIZE, pageParam, parseParams, textParam, type Params } from "@/lib/params";
 import { loadViews, type OrderView } from "@/orders/orders";
 import { idleConsulta } from "./contacts";
 
-export const PAGE_SIZE = 50;
 export const OUTCOMES = ["compro", "venta", "consulta"] as const;
 export type Outcome = (typeof OUTCOMES)[number];
 
@@ -21,12 +21,6 @@ export type CustomerRow = {
   spent: string;
 };
 
-type Params = Record<string, string | string[] | undefined>;
-// Bad values in the URL drop that filter instead of failing the page.
-const optional = <T extends z.ZodType>(schema: T) => schema.optional().catch(undefined);
-export const pageParam = z.coerce.number().int().min(1).max(10_000).catch(1);
-export const textParam = optional(z.string().trim().min(1).max(100));
-
 const customerFilters = z.object({
   q: textParam,
   estado: optional(z.enum(OUTCOMES)),
@@ -35,11 +29,7 @@ const customerFilters = z.object({
 });
 export type CustomerFilters = z.infer<typeof customerFilters>;
 
-export function parseCustomerFilters(params: Params): CustomerFilters {
-  const one = (k: string) => (Array.isArray(params[k]) ? params[k][0] : params[k]);
-  const parsed = customerFilters.parse({ q: one("q"), estado: one("estado"), tablero: one("tablero"), pagina: one("pagina") ?? 1 });
-  return Object.fromEntries(Object.entries(parsed).filter(([, v]) => v !== undefined)) as CustomerFilters;
-}
+export const parseCustomerFilters = (params: Params): CustomerFilters => parseParams(customerFilters, params);
 
 // Columns are qualified by hand: drizzle renders bare names inside sql``.
 const hasOrder = (status?: string) =>
