@@ -29,6 +29,32 @@ async function contactInfo(tenantId: string, contactId: string) {
   return c ?? { name: null, phone: null };
 }
 
+// Moves the customer to Venta, pauses the bot in this chat and tells the admin. Used by the
+// handoff_to_admin tool and by the reply guard when the model asks for sensitive data.
+export async function handOff(
+  tenantId: string,
+  contactId: string,
+  reason: string,
+  opts: Pick<ToolOptions, "notify" | "pauseHours">,
+): Promise<void> {
+  const hours = opts.pauseHours ?? 12;
+  await withTenant(tenantId, (tx) =>
+    tx
+      .update(contacts)
+      .set({
+        stage: "venta",
+        botPausedUntil: sql`now() + make_interval(hours => ${hours})`,
+        reachedVentaAt: sql`coalesce(${contacts.reachedVentaAt}, now())`,
+      })
+      .where(eq(contacts.id, contactId)),
+  );
+  try {
+    await opts.notify?.(handoffText(await contactInfo(tenantId, contactId), reason));
+  } catch {
+    await recordAgentError(tenantId, "HANDOFF_NOTIFY");
+  }
+}
+
 export function makeTools(tenantId: string, contactId: string, opts: ToolOptions) {
   return {
     search_catalog: tool({
@@ -125,22 +151,7 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
           opts.onAdmin?.("handoff", reason);
           return { ok: true };
         }
-        const hours = opts.pauseHours ?? 12;
-        await withTenant(tenantId, (tx) =>
-          tx
-            .update(contacts)
-            .set({
-              stage: "venta",
-              botPausedUntil: sql`now() + make_interval(hours => ${hours})`,
-              reachedVentaAt: sql`coalesce(${contacts.reachedVentaAt}, now())`,
-            })
-            .where(eq(contacts.id, contactId)),
-        );
-        try {
-          await opts.notify?.(handoffText(await contactInfo(tenantId, contactId), reason));
-        } catch {
-          await recordAgentError(tenantId, "HANDOFF_NOTIFY");
-        }
+        await handOff(tenantId, contactId, reason, opts);
         return { ok: true };
       },
     }),

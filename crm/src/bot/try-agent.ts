@@ -10,7 +10,8 @@ import { tenants, type Stage } from "@/db/schema";
 import { fail, ok, type Result } from "@/lib/result";
 import { toModelMessages } from "./history";
 import { buildSystemPrompt } from "./prompt";
-import { errorCode, generateAgentText, truncateForWhatsApp } from "./reply";
+import { errorCode, generateAgentText, SAFE_HANDOFF_TEXT, truncateForWhatsApp } from "./reply";
+import { asksForSensitiveData } from "./sensitive-guard";
 import { makeTools } from "./tools";
 
 const historyInput = z
@@ -52,6 +53,10 @@ export async function tryAgent(
           (adminNote = kind === "ask" ? `(el bot consultaría al admin: ${text})` : "(el bot pasaría la charla a alguien del equipo)"),
       }),
     });
+    // Same guard as the WhatsApp bot: never ask for bank, card or identity data.
+    if (asksForSensitiveData(reply)) {
+      return ok({ reply: SAFE_HANDOFF_TEXT, stage, adminNote: "(el bot pasaría la charla a alguien del equipo)", handoff: true });
+    }
     return ok({ reply: truncateForWhatsApp(reply.trim()), stage, adminNote, handoff });
   } catch (e) {
     if (isAuthError(e)) return fail("KEY_INVALID", "El proveedor rechazó la API key");

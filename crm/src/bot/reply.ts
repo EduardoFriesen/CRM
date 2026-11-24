@@ -12,10 +12,12 @@ import { notifyAdmin, relayConfirmText, relayFailedText } from "./admin-messages
 import { toModelMessages, type HistoryTurn } from "./history";
 import { buildSystemPrompt } from "./prompt";
 import { enqueueReminder } from "./queue";
-import { makeTools } from "./tools";
+import { asksForSensitiveData } from "./sensitive-guard";
+import { handOff, makeTools } from "./tools";
 
 const HISTORY = 20;
 const MAX_BOT_REPLIES_PER_HOUR = 20;
+export const SAFE_HANDOFF_TEXT = "Para coordinar el pago te atiende alguien del equipo en un momento.";
 const INTRO_GAP_MS = 24 * 60 * 60 * 1000;
 const WHATSAPP_MAX = 1500;
 
@@ -214,13 +216,14 @@ export async function runConversation(
   const system = buildSystemPrompt({ ...rt, tenantName: conv.tenantName, introduce, now, facts, stage: conv.contact.stage });
   const history = toModelMessages(conv.recent.map(toTurn), { toolCalls: true });
   let handedOff = false;
+  const notify = (t: string) => notifyAdmin(tenantId, t, { send });
 
   const reply = await generateOrRecord(tenantId, rt, deps.model, {
     system,
     messages: history,
     tools: makeTools(tenantId, contactId, {
       dryRun: false,
-      notify: (t) => notifyAdmin(tenantId, t, { send }),
+      notify,
       scheduleReminder: deps.scheduleReminder ?? ((id) => enqueueReminder(tenantId, id)),
       pauseHours: rt.pauseHours,
       onHandoff: () => (handedOff = true),
@@ -228,13 +231,21 @@ export async function runConversation(
   });
   if (reply === "skipped:key-invalid" || reply === "skipped:model-error" || reply === "skipped:quota") return reply;
 
-  const text = truncateForWhatsApp(reply.trim());
+  let text = truncateForWhatsApp(reply.trim());
   if (!text) return "skipped:empty";
 
   // The reply covers messages up to `cutoff`. If the admin wrote meanwhile, don't talk
   // over them; a customer message newer than the cutoff gets its own follow-up job.
   const cutoff = conv.recent.at(-1)!.sentAt;
   if (await adminWroteSince(tenantId, contactId, cutoff)) return "skipped:not-customer-last";
+
+  // Never ask the customer for bank, card or identity data, whatever the model wrote: a
+  // person takes over the payment instead.
+  if (asksForSensitiveData(text)) {
+    text = SAFE_HANDOFF_TEXT;
+    if (!handedOff) await handOff(tenantId, contactId, "El bot iba a pedirle datos de pago; coordiná el pago vos.", { notify, pauseHours: rt.pauseHours });
+    handedOff = true;
+  }
 
   await deliver(tenantId, contactId, { instance: conv.instance.name, jid: conv.contact.jid }, text, new Date(cutoff.getTime() + 1), send, handedOff);
   return "sent";

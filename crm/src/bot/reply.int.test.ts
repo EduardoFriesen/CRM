@@ -2,7 +2,7 @@ import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { getAgentView, saveAgentConfig } from "@/agent/config";
-import { runConversation } from "@/bot/reply";
+import { runConversation, SAFE_HANDOFF_TEXT } from "@/bot/reply";
 import { dropTenants, makeContact, makeInstance, makeTenant, ownerSql } from "@/test/db";
 
 afterAll(async () => {
@@ -496,6 +496,34 @@ describe("runConversation", () => {
       const model = new MockLanguageModelV4({ doGenerate: text("Ok") });
       await runConversation(t.id, c.id, { model, send: sendOk() });
       expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toMatch(/"type":"tool-call"[^}]*"toolName":"handoff_to_admin"/);
+    });
+
+    it("never sends a request for bank data: hands off with a safe reply instead", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "vamos por transferencia");
+      const model = new MockLanguageModelV4({ doGenerate: text("Perfecto, ¿podés proporcionarme tus datos bancarios?") });
+      const send = vi.fn(async (_i: string, jid: string) => ({ id: jid === ADMIN_JID ? `ADM-${Math.random()}` : "SAFE-1" }));
+      expect(await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} })).toBe("sent");
+      expect(send).toHaveBeenCalledWith(t.slug, c.jid, SAFE_HANDOFF_TEXT);
+      expect(send).not.toHaveBeenCalledWith(t.slug, c.jid, expect.stringContaining("bancarios"));
+      expect(send).toHaveBeenCalledWith(t.slug, ADMIN_JID, expect.stringContaining("Traspaso: Ana"));
+      const [row] = await ownerSql<{ stage: string; bot_paused_until: Date | null }[]>`select stage, bot_paused_until from contacts where id = ${c.id}`;
+      expect(row.stage).toBe("venta");
+      expect(row.bot_paused_until).not.toBeNull();
+      const [msg] = await ownerSql<{ handoff: boolean }[]>`select handoff from messages where wa_message_id = 'SAFE-1'`;
+      expect(msg.handoff).toBe(true);
+    });
+
+    it("does not hand off twice when the model already did", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "dale, ¿cómo pago?");
+      const model = new MockLanguageModelV4({
+        doGenerate: [toolCall("handoff_to_admin", { reason: "Quiere pagar" }), text("Pasame tu CBU")],
+      });
+      const send = vi.fn(async (_i: string, jid: string) => ({ id: `${jid}-${Math.random()}` }));
+      await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
+      expect(send.mock.calls.filter(([, jid]) => jid === ADMIN_JID)).toHaveLength(1);
+      expect(send).toHaveBeenCalledWith(t.slug, c.jid, SAFE_HANDOFF_TEXT);
     });
 
     it("gives the model what the team already answered", async () => {

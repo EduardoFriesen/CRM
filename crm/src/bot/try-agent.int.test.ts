@@ -2,6 +2,7 @@ import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, describe, expect, it } from "vitest";
 import { saveAgentConfig } from "@/agent/config";
+import { SAFE_HANDOFF_TEXT } from "@/bot/reply";
 import { tryAgent } from "@/bot/try-agent";
 import { dropTenants, makeContact, makeTenant, ownerSql } from "@/test/db";
 
@@ -91,6 +92,16 @@ describe("tryAgent", () => {
     });
     const r = await tryAgent(t.id, [{ role: "user", text: "¿Cómo pago?" }], { model });
     expect(r).toMatchObject({ success: true, data: { handoff: true } });
+  });
+
+  it("applies the sensitive-data guard like the WhatsApp bot", async () => {
+    const t = await makeTenant();
+    await saveAgentConfig(t.id, { agentName: "Sofi", provider: "anthropic", model: "m", apiKey: "sk-1234" }, async () => "valid");
+    const model = new MockLanguageModelV4({
+      doGenerate: { content: [{ type: "text", text: "Pasame tu CBU" }], finishReason: { unified: "stop", raw: undefined }, usage, warnings: [] },
+    });
+    const r = await tryAgent(t.id, [{ role: "user", text: "vamos por transferencia" }], { model });
+    expect(r).toMatchObject({ success: true, data: { reply: SAFE_HANDOFF_TEXT, handoff: true } });
   });
 
   it("explains an exhausted quota instead of a generic failure", async () => {
