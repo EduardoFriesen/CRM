@@ -12,6 +12,7 @@ export default defineConfig({
   // webpack compiles each route on its first visit, which takes longer than 5 s with 8 workers.
   expect: { timeout: 15_000 },
   fullyParallel: false,
+  globalSetup: "./e2e/warm-up.ts",
   reporter: "list",
   use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
