@@ -108,6 +108,8 @@ export const agentConfigs = pgTable(
   agentName: text("agent_name").notNull(),
   tone: text().notNull().default(""),
   businessInfo: text("business_info").notNull().default(""),
+  // Cheaper model for the FAQ router; null = use the main model.
+  routerModel: text("router_model"),
   provider: provider().notNull(),
   model: text().notNull(),
   baseUrl: text("base_url"),
@@ -209,6 +211,17 @@ export const orderItems = pgTable(
   (t) => [check("order_items_quantity_check", sql`${t.quantity} > 0`)],
 );
 export type OrderItem = typeof orderItems.$inferSelect;
+
+// Structured facts about the business the bot may quote; one row per tenant.
+export const businessProfiles = pgTable("business_profiles", {
+  tenantId: tenantId().primaryKey(),
+  hours: text().notNull().default(""),
+  address: text().notNull().default(""),
+  paymentMethods: text("payment_methods").notNull().default(""),
+  shipping: text().notNull().default(""),
+  other: text().notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // Daily AI consumption per tenant (Buenos Aires calendar day), for the usage bar.
 export const aiUsage = pgTable(

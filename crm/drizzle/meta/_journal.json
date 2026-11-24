@@ -148,6 +148,20 @@
       "when": 1795528588775,
       "tag": "0020_contact_consulta_since",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795563868129,
+      "tag": "0021_business_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795563868130,
+      "tag": "0022_business_profiles_rls",
+      "breakpoints": true
     }
   ]
 }
