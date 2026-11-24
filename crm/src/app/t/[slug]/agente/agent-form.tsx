@@ -29,7 +29,6 @@ const fromView = (v: AgentView | null, adminPhone: string): AgentFormValues => (
   model: v?.model ?? "",
   baseUrl: v?.baseUrl ?? "",
   tone: v?.tone ?? "",
-  businessInfo: v?.businessInfo ?? "",
   enabled: v?.enabled ?? false,
   discloseAi: v?.discloseAi ?? true,
   pauseHours: String(v?.pauseHours ?? 12),
@@ -137,15 +136,6 @@ export function AgentForm({
       <section className="panel" aria-labelledby="persona-title">
         <h2 id="persona-title">Personalidad e información</h2>
         <Field name="tone" label="Tono y actitud" errors={errors} defaultValue={values.tone} multiline rows={3} hint="Ej. Cálida, breve, con voseo. Sin emojis." />
-        <Field
-          name="businessInfo"
-          label="Información del negocio"
-          errors={errors}
-          defaultValue={values.businessInfo}
-          multiline
-          rows={6}
-          hint="Horarios, zonas y costos de envío, medios de pago. El bot solo afirma lo que está acá o en el catálogo."
-        />
       </section>
 
       <section className="panel" aria-labelledby="switches-title">

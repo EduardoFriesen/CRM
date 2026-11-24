@@ -59,6 +59,24 @@ const say = (tenantId: string, contactId: string, author: "customer" | "bot" | "
 const sendOk = () => vi.fn(async () => ({ id: `BOT-${Math.random()}` }));
 
 describe("runConversation", () => {
+  it("sends only the last 6 messages to the model", async () => {
+    const { t, c } = await setup();
+    for (let i = 0; i < 10; i++) await say(t.id, c.id, i % 2 ? "bot" : "customer", `m${i}`, 20 - i);
+    await say(t.id, c.id, "customer", "última", 1);
+    const model = new MockLanguageModelV4({ doGenerate: text("ok") });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    expect(model.doGenerateCalls[0].prompt.filter((m) => m.role !== "system").length).toBeLessThanOrEqual(6);
+  });
+
+  it("caches the system prompt for anthropic", async () => {
+    const { t, c } = await setup();
+    await say(t.id, c.id, "customer", "Hola");
+    const model = new MockLanguageModelV4({ doGenerate: text("ok") });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    const sys = model.doGenerateCalls[0].prompt.filter((m) => m.role === "system");
+    expect(sys[0].providerOptions?.anthropic?.cacheControl).toEqual({ type: "ephemeral" });
+  });
+
   it("answers and stores the reply as the bot", async () => {
     const { t, c } = await setup();
     await say(t.id, c.id, "customer", "Quiero 2 docenas de medialunas");

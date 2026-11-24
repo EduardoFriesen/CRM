@@ -13,7 +13,6 @@ export type AgentFormValues = {
   model: string;
   baseUrl: string;
   tone: string;
-  businessInfo: string;
   enabled: boolean;
   discloseAi: boolean;
   pauseHours: string;
@@ -32,7 +31,6 @@ export async function saveAgentAction(slug: string, _prev: AgentFormState, form:
     model: text("model"),
     baseUrl: text("baseUrl"),
     tone: text("tone"),
-    businessInfo: text("businessInfo"),
     enabled: form.get("enabled") === "on",
     discloseAi: form.get("discloseAi") === "on",
     pauseHours: text("pauseHours"),

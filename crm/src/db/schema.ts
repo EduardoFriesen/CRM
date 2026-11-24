@@ -107,7 +107,6 @@ export const agentConfigs = pgTable(
     .references(() => tenants.id, { onDelete: "cascade" }),
   agentName: text("agent_name").notNull(),
   tone: text().notNull().default(""),
-  businessInfo: text("business_info").notNull().default(""),
   // Cheaper model for the FAQ router; null = use the main model.
   routerModel: text("router_model"),
   provider: provider().notNull(),

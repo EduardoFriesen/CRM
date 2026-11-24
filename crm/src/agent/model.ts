@@ -18,6 +18,15 @@ export const MODEL_SUGGESTIONS: Record<Provider, string[]> = {
   ollama: ["qwen3:8b", "llama3.1:8b"],
 };
 
+// Cheap models for the FAQ router.
+export const ROUTER_SUGGESTIONS: Record<Provider, string[]> = {
+  anthropic: ["claude-haiku-5-5"],
+  google: ["gemini-3.5-flash-lite"],
+  openai: ["gpt-4.1-mini"],
+  "openai-compatible": [],
+  ollama: [],
+};
+
 // Local Ollama exists only where the server sets OLLAMA_URL (the dev compose override).
 // The URL is the server's, never the tenant's, so it may point at a private address.
 export const ollamaUrl = (): string | null => process.env.OLLAMA_URL || null;

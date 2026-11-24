@@ -12,7 +12,6 @@ const agentRow = (tenantId: string) => ({
   tenantId,
   agentName: "Sofi",
   tone: "",
-  businessInfo: "",
   provider: "anthropic" as const,
   model: "claude-haiku-5-5",
   apiKeyEnc: "x",

@@ -1,6 +1,7 @@
-import { APICallError, generateText, isStepCount, RetryError, type LanguageModel, type ModelMessage, type ToolSet } from "ai";
+import { APICallError, generateText, isStepCount, RetryError, type LanguageModel, type ModelMessage, type SystemModelMessage, type ToolSet } from "ai";
 import { and, desc, eq, gt, gte, max, sql } from "drizzle-orm";
 import { getAgentRuntime, markKeyInvalid, recordAgentError } from "@/agent/config";
+import { getBusinessProfile } from "@/business/profile";
 import { createModel, isAuthError, isQuotaExhausted } from "@/agent/model";
 import { withTenant } from "@/db/client";
 import { contacts, escalations, messages, tenants, whatsappInstances } from "@/db/schema";
@@ -15,7 +16,7 @@ import { enqueueReminder } from "./queue";
 import { asksForSensitiveData } from "./sensitive-guard";
 import { handOff, makeTools } from "./tools";
 
-const HISTORY = 20;
+const HISTORY = 6;
 const MAX_BOT_REPLIES_PER_HOUR = 20;
 export const SAFE_HANDOFF_TEXT = "Para coordinar el pago te atiende alguien del equipo en un momento.";
 const INTRO_GAP_MS = 24 * 60 * 60 * 1000;
@@ -49,30 +50,40 @@ export function meter(tenantId: string, delta: UsageDelta): Promise<void> {
   });
 }
 
+export type TurnUsage = { inputTokens: number; outputTokens: number; cachedTokens: number };
+
 // The single place the tenant's model is called: every step and its tokens are metered,
 // and a failed call still counts as one request (providers count it too).
 export async function generateAgentText(
   tenantId: string,
   model: LanguageModel,
-  args: { system: string; messages: ModelMessage[]; tools: ToolSet },
-): Promise<string> {
+  args: { system: SystemModelMessage[]; messages: ModelMessage[]; tools: ToolSet },
+): Promise<{ text: string; usage: TurnUsage }> {
+  const usage: TurnUsage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
   try {
     // No SDK-level retries: BullMQ retries transient failures, and retrying a 429 here would
     // only spend more of the provider quota. Each finished step is metered as it ends, so a
     // failure in a later step doesn't lose the earlier ones.
     const result = await generateText({
       model,
-      ...args,
-      stopWhen: isStepCount(4),
+      instructions: args.system,
+      messages: args.messages,
+      tools: args.tools,
+      stopWhen: isStepCount(3),
       maxRetries: 0,
-      onStepFinish: (step) =>
-        meter(tenantId, {
-          requests: 1,
+      onStepFinish: (step) => {
+        const delta = {
           inputTokens: step.usage.inputTokens ?? 0,
           outputTokens: step.usage.outputTokens ?? 0,
-        }),
+          cachedTokens: step.usage.inputTokenDetails?.cacheReadTokens ?? 0,
+        };
+        usage.inputTokens += delta.inputTokens;
+        usage.outputTokens += delta.outputTokens;
+        usage.cachedTokens += delta.cachedTokens;
+        return meter(tenantId, { requests: 1, inputTokens: delta.inputTokens, outputTokens: delta.outputTokens });
+      },
     });
-    return result.text;
+    return { text: result.text, usage };
   } catch (e) {
     await meter(tenantId, { requests: 1 });
     throw e;
@@ -158,7 +169,7 @@ async function generateOrRecord(
   rt: { pauseHours: number } & Parameters<typeof createModel>[0],
   model: LanguageModel | undefined,
   args: Parameters<typeof generateAgentText>[2],
-): Promise<string | "skipped:key-invalid" | "skipped:model-error" | "skipped:quota"> {
+): Promise<{ text: string; usage: TurnUsage } | "skipped:key-invalid" | "skipped:model-error" | "skipped:quota"> {
   try {
     return await generateAgentText(tenantId, model ?? (await createModel(rt)), args);
   } catch (e) {
@@ -213,7 +224,16 @@ export async function runConversation(
 
   const introduce = rt.discloseAi && (!conv.lastBotAt || now.getTime() - conv.lastBotAt.getTime() > INTRO_GAP_MS);
   const facts = await recentFacts(tenantId);
-  const system = buildSystemPrompt({ ...rt, tenantName: conv.tenantName, introduce, now, facts, stage: conv.contact.stage });
+  const system = buildSystemPrompt({
+    ...rt,
+    business: await getBusinessProfile(tenantId),
+    cache: rt.provider === "anthropic",
+    tenantName: conv.tenantName,
+    introduce,
+    now,
+    facts,
+    stage: conv.contact.stage,
+  });
   const history = toModelMessages(conv.recent.map(toTurn), { toolCalls: true });
   let handedOff = false;
   const notify = (t: string) => notifyAdmin(tenantId, t, { send });
@@ -231,7 +251,7 @@ export async function runConversation(
   });
   if (reply === "skipped:key-invalid" || reply === "skipped:model-error" || reply === "skipped:quota") return reply;
 
-  let text = truncateForWhatsApp(reply.trim());
+  let text = truncateForWhatsApp(reply.text.trim());
   if (!text) return "skipped:empty";
 
   // The reply covers messages up to `cutoff`. If the admin wrote meanwhile, don't talk
@@ -295,6 +315,8 @@ async function relayToCustomer(
 
   const system = buildSystemPrompt({
     ...rt,
+    business: await getBusinessProfile(tenantId),
+    cache: rt.provider === "anthropic",
     tenantName: conv.tenantName,
     introduce: false,
     now,
@@ -311,7 +333,7 @@ async function relayToCustomer(
 
   const reply = await generateOrRecord(tenantId, rt, model, { system, messages: history, tools: {} });
   if (reply === "skipped:key-invalid" || reply === "skipped:model-error" || reply === "skipped:quota") return reply;
-  const text = truncateForWhatsApp(reply.trim());
+  const text = truncateForWhatsApp(reply.text.trim());
   if (!text) return "skipped:empty";
 
   // Same guards as a normal reply: don't talk over an admin who wrote meanwhile, and place

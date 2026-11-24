@@ -14,9 +14,9 @@ const LOCAL_KEY = "local";
 export type AgentView = {
   agentName: string;
   tone: string;
-  businessInfo: string;
   provider: Provider;
   model: string;
+  routerModel: string | null;
   baseUrl: string | null;
   apiKeyLast4: string;
   keyStatus: KeyStatus;
@@ -33,7 +33,7 @@ export type AgentView = {
 export type AgentRuntime = ModelSettings & {
   agentName: string;
   tone: string;
-  businessInfo: string;
+  routerModel: string | null;
   enabled: boolean;
   discloseAi: boolean;
   keyStatus: KeyStatus;
@@ -61,9 +61,9 @@ const dailyLimit = z.preprocess(
 export const agentInput = z.object({
   agentName: z.string().trim().min(1, "Poné un nombre").max(60, "Máximo 60 caracteres"),
   tone: z.string().trim().max(2000, "Máximo 2000 caracteres").default(""),
-  businessInfo: z.string().trim().max(8000, "Máximo 8000 caracteres").default(""),
   provider: z.enum(PROVIDERS, { error: "Elegí un proveedor" }),
   model: z.string().trim().min(1, "Indicá el modelo").max(100),
+  routerModel: z.string().trim().max(100).optional(),
   baseUrl: z.string().trim().max(300).optional(),
   apiKey: z.string().trim().max(500).optional(),
   enabled: flag,
@@ -84,9 +84,9 @@ export const agentInput = z.object({
 const toView = (r: AgentConfigRow, adminPhone: string): AgentView => ({
   agentName: r.agentName,
   tone: r.tone,
-  businessInfo: r.businessInfo,
   provider: r.provider,
   model: r.model,
+  routerModel: r.routerModel,
   baseUrl: r.baseUrl,
   apiKeyLast4: r.apiKeyLast4,
   keyStatus: r.keyStatus,
@@ -132,7 +132,7 @@ export async function saveAgentConfig(
   if (!parsed.success) {
     return fail("VALIDATION", "Revisá la configuración del agente", z.flattenError(parsed.error).fieldErrors);
   }
-  const { apiKey: newKey, baseUrl: rawBaseUrl, adminPhone, ...data } = parsed.data;
+  const { apiKey: newKey, baseUrl: rawBaseUrl, adminPhone, routerModel, ...data } = parsed.data;
 
   let baseUrl: string | null = null;
   if (data.provider === "openai-compatible") {
@@ -179,6 +179,7 @@ export async function saveAgentConfig(
 
   const values = {
     ...data,
+    routerModel: routerModel || null,
     baseUrl,
     apiKeyEnc: encrypt(apiKey),
     apiKeyLast4: local ? "" : apiKey.slice(-4),

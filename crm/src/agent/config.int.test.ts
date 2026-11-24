@@ -13,7 +13,6 @@ const valid = async () => "valid" as const;
 const base = {
   agentName: "Sofi",
   tone: "Cálida y breve",
-  businessInfo: "Abrimos de 8 a 20",
   provider: "anthropic",
   model: "claude-haiku-5-5",
   apiKey: "sk-xxxx1234",
@@ -22,6 +21,16 @@ const base = {
 };
 
 describe("agent config", () => {
+  it("saves the router model; blank means none", async () => {
+    const t = await makeTenant();
+    expect(await saveAgentConfig(t.id, { ...base, routerModel: "" }, valid)).toMatchObject({ success: true, data: { routerModel: null } });
+    expect(await saveAgentConfig(t.id, { ...base, routerModel: "claude-haiku-5-5" }, valid)).toMatchObject({
+      success: true,
+      data: { routerModel: "claude-haiku-5-5" },
+    });
+    expect((await getAgentRuntime(t.id))?.routerModel).toBe("claude-haiku-5-5");
+  });
+
   it("stores the key encrypted and never returns it", async () => {
     const t = await makeTenant();
     const r = await saveAgentConfig(t.id, base, valid);

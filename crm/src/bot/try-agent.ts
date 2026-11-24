@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getAgentRuntime } from "@/agent/config";
 import { describeAgentError } from "@/agent/errors";
 import { createModel, isAuthError, isQuotaExhausted } from "@/agent/model";
+import { getBusinessProfile } from "@/business/profile";
 import { getDb } from "@/db/client";
 import { recentFacts } from "@/facts/facts";
 import { tenants, type Stage } from "@/db/schema";
@@ -39,10 +40,10 @@ export async function tryAgent(
   let adminNote: string | null = null;
   let handoff = false;
   const facts = await recentFacts(tenantId);
-  const system = buildSystemPrompt({ ...rt, tenantName: tenant?.name ?? "", introduce: rt.discloseAi && parsed.data.length === 1, now: new Date(), facts });
+  const system = buildSystemPrompt({ ...rt, business: await getBusinessProfile(tenantId), cache: rt.provider === "anthropic", tenantName: tenant?.name ?? "", introduce: rt.discloseAi && parsed.data.length === 1, now: new Date(), facts });
   try {
     const model = deps.model ?? (await createModel(rt));
-    const reply = await generateAgentText(tenantId, model, {
+    const { text: reply } = await generateAgentText(tenantId, model, {
       system,
       messages: toModelMessages(parsed.data, { toolCalls: true }),
       tools: makeTools(tenantId, "", {
