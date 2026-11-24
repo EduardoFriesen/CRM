@@ -399,8 +399,10 @@ describe("runConversation", () => {
       });
       const send = vi.fn(async (_i: string, jid: string) => ({ id: `${jid}-${Math.random()}` }));
       await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
-      const [row] = await ownerSql<{ stage: string; bot_paused_until: Date }[]>`select stage, bot_paused_until from contacts where id = ${c.id}`;
+      const [row] = await ownerSql<{ stage: string; bot_paused_until: Date; reached_venta_at: Date | null }[]>`
+        select stage, bot_paused_until, reached_venta_at from contacts where id = ${c.id}`;
       expect(row.stage).toBe("venta");
+      expect(row.reached_venta_at).not.toBeNull();
       expect(Math.abs(row.bot_paused_until.getTime() - (Date.now() + 12 * 3600_000))).toBeLessThan(60_000);
       expect(send).toHaveBeenCalledWith(
         t.slug,

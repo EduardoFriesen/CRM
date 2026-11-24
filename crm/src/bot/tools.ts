@@ -124,7 +124,11 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
         await withTenant(tenantId, (tx) =>
           tx
             .update(contacts)
-            .set({ stage: "venta", botPausedUntil: sql`now() + make_interval(hours => ${hours})` })
+            .set({
+              stage: "venta",
+              botPausedUntil: sql`now() + make_interval(hours => ${hours})`,
+              reachedVentaAt: sql`coalesce(${contacts.reachedVentaAt}, now())`,
+            })
             .where(eq(contacts.id, contactId)),
         );
         try {

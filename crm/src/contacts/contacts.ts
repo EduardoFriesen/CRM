@@ -71,7 +71,10 @@ export async function setContactStage(
   const [row] = await withTenant(tenantId, (tx) =>
     tx
       .update(contacts)
-      .set({ stage: parsed.data.stage })
+      .set({
+        stage: parsed.data.stage,
+        ...(parsed.data.stage === "venta" && { reachedVentaAt: sql`coalesce(${contacts.reachedVentaAt}, now())` }),
+      })
       .where(and(eq(contacts.id, parsed.data.contactId), eq(contacts.tenantId, tenantId)))
       .returning({ id: contacts.id, stage: contacts.stage }),
   );

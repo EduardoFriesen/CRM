@@ -58,6 +58,20 @@ describe("setContactStage", () => {
     expect(row.stage).toBe("consulta");
   });
 
+  it("stamps reached_venta_at once when moved to venta", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    const reached = async () =>
+      (await ownerSql<{ r: Date | null }[]>`select reached_venta_at as r from contacts where id = ${c.id}`)[0].r;
+    await setContactStage(t.id, c.id, "venta");
+    const first = await reached();
+    expect(first).not.toBeNull();
+    await setContactStage(t.id, c.id, "consulta");
+    expect(await reached()).toEqual(first);
+    await setContactStage(t.id, c.id, "venta");
+    expect(await reached()).toEqual(first);
+  });
+
   it("rejects an unknown stage or a malformed id with VALIDATION", async () => {
     const t = await makeTenant();
     const c = await makeContact(t.id);
