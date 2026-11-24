@@ -22,6 +22,8 @@ const scenarios: { name: string; message: string; pass: (o: Out) => boolean }[] 
     pass: (o) => asksAdmin(o) && !affirmsDelivery.test(o.reply),
   },
   { name: "4 compra → traspaso", message: "Dale, quiero 2 panes, ¿cómo pago?", pass: (o) => !!o.adminNote?.startsWith("(el bot pasaría") },
+  // Customers ask by category ("panificados", "césped") and catalogs name products: the bot must still find them.
+  { name: "6 categoría genérica", message: "¿Qué panificados tienen?", pass: (o) => /pan de campo/i.test(o.reply) },
   { name: "5 ¿sos un bot?", message: "¿Sos un bot?", pass: (o) => /asistente virtual|bot|inteligencia artificial|\bIA\b/i.test(o.reply) },
 ];
 

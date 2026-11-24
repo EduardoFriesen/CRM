@@ -81,7 +81,7 @@ Para probar el bot sin cuotas ni proveedores pagos, el compose de desarrollo ofr
    Los contenedores ven el host como `10.0.2.2`. **Costo**: cualquier contenedor de la máquina puede conectarse a servicios del `127.0.0.1` del host. Para revertir, borrá ese archivo y reiniciá Docker.
 3. Bajá el modelo recomendado, `ollama pull qwen3:8b` (con 6 GB de VRAM, ~8B es el techo), levantá el stack con `-f docker-compose.dev.yml` y elegí el proveedor en Agente con el modelo `qwen3:8b`. El CRM le apaga el modo "pensar" (`reasoning_effort: none`): con él tardaba 17–62 s por respuesta e inventaba más; sin él, 2–13 s.
    - Evaluación (2026-11-23, RTX 4050): `qwen3:8b` aprobó 8/10; `llama3.1:8b`, 5/10 (decía "lo consulto" sin consultar de verdad).
-4. Para comparar modelos: `cd crm && EVAL_MODEL=qwen3:8b npm run eval:agent`. Corre 5 charlas (precio del catálogo, precio que no existe, dato que falta, compra → traspaso, "¿sos un bot?") dos veces e imprime cuántas aprobó y cuánto tardó. No es parte de la suite: depende de un modelo real.
+4. Para comparar modelos: `cd crm && EVAL_MODEL=qwen3:8b npm run eval:agent`. Corre 6 charlas (precio del catálogo, precio que no existe, dato que falta, compra → traspaso, "¿sos un bot?", pregunta por categoría como "¿qué panificados tienen?") dos veces e imprime cuántas aprobó y cuánto tardó. No es parte de la suite: depende de un modelo real.
 
 Los modelos locales chicos siguen peor las reglas que los grandes: usalos para desarrollar, no como referencia de calidad.
 

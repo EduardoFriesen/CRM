@@ -33,7 +33,15 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
       description:
         "Busca productos activos del negocio por nombre o descripción. Devuelve nombre, descripción, precio y disponibilidad.",
       inputSchema: z.object({ query: z.string().max(200).describe("Palabras a buscar; vacío lista los primeros productos") }),
-      execute: async ({ query }) => ({ products: await searchCatalog(tenantId, query) }),
+      execute: async ({ query }) => {
+        const products = await searchCatalog(tenantId, query);
+        if (products.length > 0 || !query.trim()) return { products };
+        // Customers ask by category ("césped", "panificados") while catalogs name products: an
+        // empty result made the model say "no tenemos". Show what exists instead.
+        const all = await searchCatalog(tenantId, "");
+        if (all.length === 0) return { products: all };
+        return { products: all, note: `Ningún producto coincide con "${query}". Este es el catálogo completo: respondé con lo que hay.` };
+      },
     }),
     set_stage: tool({
       // Venta comes from handoff_to_admin and Postventa from a delivered order: the only
