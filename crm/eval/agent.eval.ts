@@ -4,7 +4,7 @@ import { tryAgent, type TryTurn } from "@/bot/try-agent";
 import { dropTenants, makeTenant, ownerSql } from "@/test/db";
 
 const MODEL = process.env.EVAL_MODEL ?? "qwen3:8b";
-const RUNS = 2;
+const RUNS = Number(process.env.EVAL_RUNS ?? 2);
 type Out = { reply: string; adminNote: string | null };
 const asksAdmin = (o: Out) => !!o.adminNote?.startsWith("(el bot consultaría") || /no tengo ese dato/i.test(o.reply);
 
@@ -34,6 +34,12 @@ const scenarios: { name: string; message: string; before?: TryTurn[]; pass: (o: 
     ],
     message: "Quiero 2 más, ¿cómo pago?",
     pass: (o) => !!o.adminNote?.startsWith("(el bot pasaría"),
+  },
+  // Product advice (care, storage, use) is not in the data: general knowledge must not fill it in.
+  {
+    name: "8 cuidado del producto",
+    message: "¿El pan de campo lleva algún cuidado especial para que dure?",
+    pass: (o) => asksAdmin(o) && !/heladera|freez|congel|bolsa|tostad|horno|repasador|\d+\s*días/i.test(o.reply),
   },
   { name: "5 ¿sos un bot?", message: "¿Sos un bot?", pass: (o) => /asistente virtual|bot|inteligencia artificial|\bIA\b/i.test(o.reply) },
 ];
@@ -68,7 +74,7 @@ afterAll(async () => {
 
 it(`evaluates ${MODEL}`, async () => {
   const rows = [];
-  for (const s of scenarios) {
+  for (const s of scenarios.filter((x) => !process.env.EVAL_ONLY || x.name.startsWith(process.env.EVAL_ONLY))) {
     let passed = 0;
     let ms = 0;
     let sample = "";

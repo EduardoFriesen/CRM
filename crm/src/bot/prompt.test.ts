@@ -27,6 +27,13 @@ describe("buildSystemPrompt", () => {
     expect(p).toContain("no tengo ese dato, te lo confirma alguien del equipo");
   });
 
+  it("forbids filling gaps with general knowledge, not only prices and policies", () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toMatch(/no uses tu conocimiento general/i);
+    expect(p).toMatch(/cuidados/i);
+    expect(p).toMatch(/no ofrezcas/i);
+  });
+
   it("adds the introduction only when asked", () => {
     expect(buildSystemPrompt({ ...base, introduce: true })).toContain("asistente virtual de Panadería Pepe");
     expect(buildSystemPrompt(base)).not.toContain("asistente virtual de Panadería Pepe");
