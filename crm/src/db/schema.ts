@@ -55,6 +55,8 @@ export const contacts = pgTable(
     // The bot's conversation starts here after a reopen.
     reopenedAt: timestamp("reopened_at", { withTimezone: true }),
     reachedVentaAt: timestamp("reached_venta_at", { withTimezone: true }),
+    // Last time the contact (re)entered Consulta: the hourly reply cap counts from here.
+    consultaSince: timestamp("consulta_since", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique().on(t.tenantId, t.jid)],

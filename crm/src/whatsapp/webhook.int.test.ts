@@ -198,6 +198,9 @@ describe("reopening", () => {
     await handleEvolutionEvent(tenant.slug, SECRET, upsert({ remoteJid: jid }));
     expect(await state(jid)).toMatchObject({ stage: "consulta", closed_at: null, bot_paused_until: null });
     expect((await state(jid)).reopened_at).not.toBeNull();
+    const [{ consulta_since }] = await ownerSql<{ consulta_since: Date | null }[]>`
+      select consulta_since from contacts where tenant_id = ${tenant.id} and jid = ${jid}`;
+    expect(consulta_since).not.toBeNull();
   });
 
   it("the reopening message belongs to the new conversation", async () => {

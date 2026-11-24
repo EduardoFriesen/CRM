@@ -59,7 +59,7 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
         const moved = await withTenant(tenantId, (tx) =>
           tx
             .update(contacts)
-            .set({ stage: "consulta" })
+            .set({ stage: "consulta", consultaSince: sql`now()` })
             .where(and(eq(contacts.id, contactId), eq(contacts.stage, "postventa")))
             .returning({ id: contacts.id }),
         );

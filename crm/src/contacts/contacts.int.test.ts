@@ -58,6 +58,18 @@ describe("setContactStage", () => {
     expect(row.stage).toBe("consulta");
   });
 
+  it("stamps consulta_since only when moved into consulta from another stage", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    const since = async () =>
+      (await ownerSql<{ s: Date | null }[]>`select consulta_since as s from contacts where id = ${c.id}`)[0].s;
+    await setContactStage(t.id, c.id, "consulta");
+    expect(await since()).toBeNull();
+    await setContactStage(t.id, c.id, "venta");
+    await setContactStage(t.id, c.id, "consulta");
+    expect(await since()).not.toBeNull();
+  });
+
   it("stamps reached_venta_at once when moved to venta", async () => {
     const t = await makeTenant();
     const c = await makeContact(t.id);

@@ -240,12 +240,24 @@ describe("runConversation", () => {
     expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain("asistente virtual de");
   });
 
-  it("keeps the hourly reply cap across a reopen", async () => {
+  it("renews the hourly reply cap when the customer is back in consulta", async () => {
     const { t, c } = await setup();
     for (let i = 0; i < 20; i++) await say(t.id, c.id, "bot", `r${i}`, 30);
-    await ownerSql`update contacts set reopened_at = now() - interval '1 minute' where id = ${c.id}`;
     await say(t.id, c.id, "customer", "Hola");
-    expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send: sendOk() })).toBe("skipped:rate-limit");
+    const run = () => runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send: sendOk() });
+    expect(await run()).toBe("skipped:rate-limit");
+    await ownerSql`update contacts set consulta_since = now() - interval '1 minute' where id = ${c.id}`;
+    expect(await run()).toBe("sent");
+  });
+
+  it("the bot reopening a postventa customer renews the cap", async () => {
+    const { t, c } = await setup();
+    await ownerSql`update contacts set stage = 'postventa' where id = ${c.id}`;
+    await say(t.id, c.id, "customer", "Quiero otro pedido");
+    const model = new MockLanguageModelV4({ doGenerate: [stageCall("consulta"), text("¡Dale!")] });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    const [row] = await ownerSql<{ consulta_since: Date | null }[]>`select consulta_since from contacts where id = ${c.id}`;
+    expect(row.consulta_since).not.toBeNull();
   });
 
   it("records the error code and rethrows transient failures so the queue retries", async () => {

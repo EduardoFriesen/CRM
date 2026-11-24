@@ -73,6 +73,10 @@ export async function setContactStage(
       .update(contacts)
       .set({
         stage: parsed.data.stage,
+        // In an UPDATE, contacts.stage is still the old value.
+        ...(parsed.data.stage === "consulta" && {
+          consultaSince: sql`case when ${contacts.stage} <> 'consulta' then now() else ${contacts.consultaSince} end`,
+        }),
         ...(parsed.data.stage === "venta" && { reachedVentaAt: sql`coalesce(${contacts.reachedVentaAt}, now())` }),
       })
       .where(and(eq(contacts.id, parsed.data.contactId), eq(contacts.tenantId, tenantId)))
@@ -128,7 +132,7 @@ export async function closeContact(tenantId: string, id: string): Promise<Result
 export async function reopenContact(tx: Tx, tenantId: string, jid: string, at: Date): Promise<void> {
   await tx
     .update(contacts)
-    .set({ closedAt: null, reopenedAt: at, stage: "consulta", botPausedUntil: null })
+    .set({ closedAt: null, reopenedAt: at, consultaSince: at, stage: "consulta", botPausedUntil: null })
     .where(
       and(
         eq(contacts.tenantId, tenantId),

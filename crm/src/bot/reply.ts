@@ -105,10 +105,11 @@ async function loadConversation(tenantId: string, contactId: string, now: Date) 
       .where(and(eq(messages.contactId, contactId), since))
       .orderBy(desc(messages.sentAt))
       .limit(HISTORY);
-    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    // The cap renews each time the customer is back in Consulta.
+    const capFrom = new Date(Math.max(now.getTime() - 60 * 60 * 1000, contact?.consultaSince?.getTime() ?? 0));
     const [{ botLastHour, lastBotAt }] = await tx
       .select({
-        botLastHour: sql<number>`count(*) filter (where ${messages.sentAt} > ${hourAgo.toISOString()}::timestamptz)`.mapWith(Number),
+        botLastHour: sql<number>`count(*) filter (where ${messages.sentAt} > ${capFrom.toISOString()}::timestamptz)`.mapWith(Number),
         // Introductions count only from the reopen; the hourly cap counts everything.
         lastBotAt: contact?.reopenedAt
           ? sql<Date | null>`max(${messages.sentAt}) filter (where ${messages.sentAt} >= ${contact.reopenedAt.toISOString()}::timestamptz)`.mapWith(messages.sentAt)

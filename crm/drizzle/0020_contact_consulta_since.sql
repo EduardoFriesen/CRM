@@ -1,0 +1,1 @@
+ALTER TABLE "contacts" ADD COLUMN "consulta_since" timestamp with time zone;
