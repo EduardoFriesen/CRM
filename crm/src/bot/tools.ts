@@ -67,8 +67,10 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
       },
     }),
     ask_admin: tool({
+      // Spelled out: with "un dato que no tenés", models counted their general knowledge as
+      // having it and answered care questions themselves (qwen3:8b: 0/6 calls).
       description:
-        "Le consulta al administrador del negocio un dato que no tenés. Después decile al cliente que lo consultás y le avisás.",
+        "Le consulta al administrador del negocio cualquier cosa que no esté en el catálogo ni en la información del negocio: cuidados, uso, instalación, envíos, descuentos, disponibilidad futura u otra duda. Usala aunque creas saber la respuesta. Después decile al cliente que lo consultás y le avisás.",
       inputSchema: z.object({
         question: z.string().trim().min(1).max(500).describe("La pregunta, sin datos personales del cliente"),
         is_price: z.boolean().describe("true si es sobre precios, costos, descuentos o recargos"),

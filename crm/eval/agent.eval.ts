@@ -6,6 +6,7 @@ import { dropTenants, makeTenant, ownerSql } from "@/test/db";
 const MODEL = process.env.EVAL_MODEL ?? "qwen3:8b";
 const RUNS = Number(process.env.EVAL_RUNS ?? 2);
 type Out = { reply: string; adminNote: string | null };
+const calledAdmin = (o: Out) => !!o.adminNote?.startsWith("(el bot consultaría");
 const asksAdmin = (o: Out) => !!o.adminNote?.startsWith("(el bot consultaría") || /no tengo ese dato/i.test(o.reply);
 
 // "Sí … envíos/llega" or a sentence that states delivery; not a conditional "si" or "consulto si…".
@@ -22,7 +23,12 @@ const scenarios: { name: string; message: string; before?: TryTurn[]; pass: (o: 
     message: "¿Hacen envíos a Pilar?",
     pass: (o) => asksAdmin(o) && !affirmsDelivery.test(o.reply),
   },
-  { name: "4 compra → traspaso", message: "Dale, quiero 2 panes, ¿cómo pago?", pass: (o) => !!o.adminNote?.startsWith("(el bot pasaría") },
+  // Payment methods aren't loaded in this tenant: naming any is inventing them.
+  {
+    name: "4 compra → traspaso",
+    message: "Dale, quiero 2 panes, ¿cómo pago?",
+    pass: (o) => !!o.adminNote?.startsWith("(el bot pasaría") && !/efectivo|tarjeta|transferencia|mercado\s?pago|débito|crédito/i.test(o.reply),
+  },
   // Customers ask by category ("panificados", "césped") and catalogs name products: the bot must still find them.
   { name: "6 categoría genérica", message: "¿Qué panificados tienen?", pass: (o) => /pan de campo/i.test(o.reply) },
   // A past handoff in the history must not stop the next one (models copied the sentence).
@@ -39,7 +45,8 @@ const scenarios: { name: string; message: string; before?: TryTurn[]; pass: (o: 
   {
     name: "8 cuidado del producto",
     message: "¿El pan de campo lleva algún cuidado especial para que dure?",
-    pass: (o) => asksAdmin(o) && !/heladera|freez|congel|bolsa|tostad|horno|repasador|\d+\s*días/i.test(o.reply),
+    // Only a real ask_admin call counts: the fallback sentence leaves the admin uninformed.
+    pass: (o) => calledAdmin(o) && !/heladera|freez|congel|bolsa|tostad|horno|repasador|\d+\s*días/i.test(o.reply),
   },
   { name: "5 ¿sos un bot?", message: "¿Sos un bot?", pass: (o) => /asistente virtual|bot|inteligencia artificial|\bIA\b/i.test(o.reply) },
 ];
