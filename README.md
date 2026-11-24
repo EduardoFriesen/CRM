@@ -31,7 +31,7 @@ Flujo:
 
 1. En http://crm.localhost:8080 crea el negocio (nombre, identificador para la URL y WhatsApp del administrador).
 2. Entra al negocio > **WhatsApp** y escanea el QR desde el telefono del negocio (Dispositivos vinculados). La app crea la instancia en Evolution con un webhook propio y un secreto por instancia.
-3. Cada mensaje que recibe o envia ese numero aparece en **Clientes**, en la columna Consulta. Tocar la tarjeta abre el chat en `wa.me` (con la cuenta de WhatsApp que tengas abierta en ese dispositivo); la etapa se cambia con el selector de la tarjeta.
+3. Cada mensaje que recibe o envia ese numero aparece en el **Tablero**, en la columna Consulta. Tocar la tarjeta abre el chat en `wa.me` (con la cuenta de WhatsApp que tengas abierta en ese dispositivo); la etapa se cambia con el selector de la tarjeta.
 
 4. En **Catálogo** cargá los productos y en **Agente** el modelo, la API key, el tono y la información del negocio. Probalo en el chat de prueba y encendé el bot.
 
@@ -91,7 +91,9 @@ Los modelos locales chicos siguen peor las reglas que los grandes: usalos para d
 - Se crean desde la tarjeta de un cliente en **Venta** (botón **Crear pedido**): productos del catálogo con cantidad, fecha de entrega y datos de envío. El total sale de los precios del catálogo, que quedan congelados en el pedido.
 - **Descuentan stock** al guardarse; si algún producto no alcanza, el pedido no se guarda y dice cuántos quedan. Los productos sin control de stock no se descuentan. **Cancelar** devuelve el stock.
 - **Marcar entregado** pasa al cliente a **Postventa**. Sin un pedido entregado nadie puede llevar a un cliente a Postventa: ni el selector de la tarjeta ni el bot.
-- Los pedidos pendientes se ven abajo del tablero de Clientes (Atrasados · Hoy · Mañana · Próximos); "Ver entregados y cancelados" muestra los últimos 50. Los pedidos no se borran: se cancelan.
+- Los pedidos pendientes se ven abajo del **Tablero** (Atrasados · Hoy · Mañana · Próximos). Los pedidos no se borran: se cancelan.
+- **Ventas** lista los pedidos entregados (y los cancelados si tildás "Incluir cancelados"), filtrables por producto, cliente, fecha de entrega y monto, con la cantidad de ventas, el monto total y el ticket promedio del filtro.
+- **Clientes** lista a todos los que escribieron, también los que salieron del tablero, con su estado: **Compró** (tiene un pedido entregado), **Llegó a Venta sin comprar** o **Nunca pasó de Consulta**. Se filtra por nombre o teléfono, estado y si está en el tablero; tocar un cliente despliega su historial de compras y el total gastado. Los clientes anteriores a esta versión que pasaron por Venta sin pedido figuran como "Nunca pasó de Consulta".
 
 ## Tests
 
