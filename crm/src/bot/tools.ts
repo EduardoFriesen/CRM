@@ -14,6 +14,8 @@ export type ToolOptions = {
   dryRun: boolean;
   onStage?: (stage: Stage) => void;
   onAdmin?: (kind: "ask" | "handoff", text: string) => void;
+  /** Called once handoff_to_admin has run (also in dry run), so the reply is stored as a handoff. */
+  onHandoff?: () => void;
   /** Sends a WhatsApp message to the tenant's admin; returns its id. */
   notify?: (text: string) => Promise<{ id: string }>;
   scheduleReminder?: (escalationId: string) => Promise<void>;
@@ -116,6 +118,7 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
         "Pasa la conversación a una persona del equipo cuando el cliente quiere cerrar la compra. Después decile que lo atiende alguien del equipo.",
       inputSchema: z.object({ reason: z.string().trim().min(1).max(300).describe("Resumen breve de lo que quiere el cliente") }),
       execute: async ({ reason }) => {
+        opts.onHandoff?.();
         if (opts.dryRun) {
           opts.onAdmin?.("handoff", reason);
           return { ok: true };

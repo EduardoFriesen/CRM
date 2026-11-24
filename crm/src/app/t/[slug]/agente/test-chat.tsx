@@ -25,8 +25,12 @@ export function TestChat({ slug, configured }: { slug: string; configured: boole
     setError(null);
     start(async () => {
       try {
-        const r = await tryAgentAction(slug, history.map(({ role, text: t }) => ({ role, text: t })));
-        if (r.success) setTurns([...history, { role: "assistant" as const, text: r.data.reply, stage: r.data.stage, adminNote: r.data.adminNote }].slice(-19));
+        // handoff travels back so the model sees past handoffs as tool calls.
+        const r = await tryAgentAction(slug, history.map(({ role, text: t, handoff }) => ({ role, text: t, handoff })));
+        if (r.success) {
+          const { reply, stage, adminNote, handoff } = r.data;
+          setTurns([...history, { role: "assistant" as const, text: reply, stage, adminNote, handoff }].slice(-19));
+        }
         else setError(r.error.message);
       } catch {
         setError("No pudimos hablar con el agente, probá de nuevo.");

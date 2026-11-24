@@ -95,6 +95,17 @@ describe("runRelay", () => {
     expect(row.author).toBe("bot");
   });
 
+  it("relays without tool calls in the history, even after a handoff", async () => {
+    const { t, c } = await setup();
+    await ownerSql`insert into messages (tenant_id, contact_id, direction, author, body, wa_message_id, sent_at, handoff) values
+      (${t.id}, ${c.id}, 'in', 'customer', 'Quiero 2', ${"h-c-" + Math.random()}, now() - interval '5 minutes', false),
+      (${t.id}, ${c.id}, 'out', 'bot', 'Te atiende alguien del equipo.', ${"h-b-" + Math.random()}, now() - interval '4 minutes', true)`;
+    const id = await escalation(t.id, c.id, { status: "answered", answer: "Sí, los martes" });
+    const model = new MockLanguageModelV4({ doGenerate: text("Sí, los martes") });
+    await runRelay(t.id, id, { model, send: vi.fn(async () => ({ id: `R-${Math.random()}` })) });
+    expect(JSON.stringify(model.doGenerateCalls[0].prompt)).not.toContain("tool-call");
+  });
+
   it("does not relay while the admin is handling the chat", async () => {
     const { t, c } = await setup();
     await ownerSql`update contacts set bot_paused_until = now() + interval '1 hour' where id = ${c.id}`;

@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { saveAgentConfig, type AgentView } from "@/agent/config";
-import { tryAgent, type TryTurn } from "@/bot/try-agent";
-import type { Stage } from "@/db/schema";
+import { tryAgent, type TryReply, type TryTurn } from "@/bot/try-agent";
 import type { Result } from "@/lib/result";
 import { getCurrentTenant } from "@/tenants/tenants";
 
@@ -49,7 +48,7 @@ export async function saveAgentAction(slug: string, _prev: AgentFormState, form:
 export async function tryAgentAction(
   slug: string,
   history: TryTurn[],
-): Promise<Result<{ reply: string; stage: Stage | null; adminNote: string | null }>> {
+): Promise<Result<TryReply>> {
   const tenant = await getCurrentTenant(slug);
   return tryAgent(tenant.id, history);
 }

@@ -32,7 +32,7 @@ describe("tryAgent", () => {
       ],
     });
     const r = await tryAgent(t.id, [{ role: "user", text: "Quiero comprar" }], { model });
-    expect(r).toEqual({ success: true, data: { reply: "¡Genial!", stage: "consulta", adminNote: null } });
+    expect(r).toEqual({ success: true, data: { reply: "¡Genial!", stage: "consulta", adminNote: null, handoff: false } });
     const stages = await ownerSql<{ stage: string }[]>`select stage from contacts where tenant_id = ${t.id}`;
     expect(stages).toEqual([{ stage: "consulta" }]);
   });
@@ -75,6 +75,24 @@ describe("tryAgent", () => {
     expect(await ownerSql`select 1 from escalations where tenant_id = ${t.id}`).toHaveLength(0);
   });
 
+  it("reports a handoff so the test chat can replay it", async () => {
+    const t = await makeTenant();
+    await saveAgentConfig(t.id, { agentName: "Sofi", provider: "anthropic", model: "m", apiKey: "sk-1234" }, async () => "valid");
+    const model = new MockLanguageModelV4({
+      doGenerate: [
+        {
+          content: [{ type: "tool-call", toolCallId: "h1", toolName: "handoff_to_admin", input: JSON.stringify({ reason: "Quiere pagar" }) }],
+          finishReason: { unified: "tool-calls", raw: undefined },
+          usage,
+          warnings: [],
+        },
+        { content: [{ type: "text", text: "Te atiende alguien" }], finishReason: { unified: "stop", raw: undefined }, usage, warnings: [] },
+      ],
+    });
+    const r = await tryAgent(t.id, [{ role: "user", text: "¿Cómo pago?" }], { model });
+    expect(r).toMatchObject({ success: true, data: { handoff: true } });
+  });
+
   it("explains an exhausted quota instead of a generic failure", async () => {
     const t = await makeTenant();
     await saveAgentConfig(t.id, { agentName: "Sofi", provider: "google", model: "m", apiKey: "sk-1234" }, async () => "valid");
@@ -101,5 +119,23 @@ describe("tryAgent", () => {
       success: false,
       error: { code: "NO_KEY", message: "Cargá una API key para probar el agente" },
     });
+  });
+
+  it("replays a handoff turn of the test chat as a tool call", async () => {
+    const t = await makeTenant();
+    await saveAgentConfig(t.id, { agentName: "Sofi", provider: "anthropic", model: "m", apiKey: "sk-1234" }, async () => "valid");
+    const model = new MockLanguageModelV4({
+      doGenerate: { content: [{ type: "text", text: "Ok" }], finishReason: { unified: "stop", raw: undefined }, usage, warnings: [] },
+    });
+    await tryAgent(
+      t.id,
+      [
+        { role: "user", text: "Quiero 2" },
+        { role: "assistant", text: "Te atiende alguien del equipo.", handoff: true },
+        { role: "user", text: "Quiero 2 más" },
+      ],
+      { model },
+    );
+    expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toMatch(/"type":"tool-call"[^}]*"toolName":"handoff_to_admin"/);
   });
 });

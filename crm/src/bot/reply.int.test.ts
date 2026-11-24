@@ -423,6 +423,37 @@ describe("runConversation", () => {
       expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("Sí") }), send })).toBe("sent");
     });
 
+    it("stores the handoff reply with handoff = true", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "Dale, ¿cómo pago?");
+      const model = new MockLanguageModelV4({
+        doGenerate: [toolCall("handoff_to_admin", { reason: "Quiere pagar" }), text("Te atiende alguien del equipo.")],
+      });
+      const send = vi.fn(async (_i: string, jid: string) => ({ id: jid === ADMIN_JID ? `ADM-${Math.random()}` : "HANDOFF-1" }));
+      await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
+      const [row] = await ownerSql<{ handoff: boolean }[]>`select handoff from messages where wa_message_id = 'HANDOFF-1'`;
+      expect(row.handoff).toBe(true);
+    });
+
+    it("stores a normal reply with handoff = false", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "Hola");
+      await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("¡Hola!") }), send: vi.fn(async () => ({ id: "PLAIN-1" })) });
+      const [row] = await ownerSql<{ handoff: boolean }[]>`select handoff from messages where wa_message_id = 'PLAIN-1'`;
+      expect(row.handoff).toBe(false);
+    });
+
+    it("replays a previous handoff to the model as a tool call", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "Quiero 2 docenas", 10);
+      await say(t.id, c.id, "bot", "Bárbaro, ya te atiende alguien del equipo.", 9);
+      await ownerSql`update messages set handoff = true where contact_id = ${c.id} and author = 'bot'`;
+      await say(t.id, c.id, "customer", "Quiero 2 más, dale");
+      const model = new MockLanguageModelV4({ doGenerate: text("Ok") });
+      await runConversation(t.id, c.id, { model, send: sendOk() });
+      expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toMatch(/"type":"tool-call"[^}]*"toolName":"handoff_to_admin"/);
+    });
+
     it("gives the model what the team already answered", async () => {
       const { t, c } = await setup();
       await ownerSql`insert into business_facts (tenant_id, question, answer) values (${t.id}, '¿Envían a Pilar?', 'Sí, los martes')`;

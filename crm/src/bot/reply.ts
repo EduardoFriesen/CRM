@@ -9,6 +9,7 @@ import { recentFacts } from "@/facts/facts";
 import { recordUsage, type UsageDelta } from "@/usage/usage";
 import { whyNotLearned } from "@/facts/facts";
 import { notifyAdmin, relayConfirmText, relayFailedText } from "./admin-messages";
+import { toModelMessages, type HistoryTurn } from "./history";
 import { buildSystemPrompt } from "./prompt";
 import { enqueueReminder } from "./queue";
 import { makeTools } from "./tools";
@@ -84,13 +85,20 @@ export function errorCode(e: unknown): string {
   return String(err?.code ?? err?.name ?? "UNKNOWN");
 }
 
+// Stored message → model turn: only the customer speaks as the user.
+const toTurn = (m: { author: string; body: string; handoff: boolean }): HistoryTurn => ({
+  role: m.author === "customer" ? "user" : "assistant",
+  text: m.body,
+  handoff: m.handoff,
+});
+
 async function loadConversation(tenantId: string, contactId: string, now: Date) {
   return withTenant(tenantId, async (tx) => {
     const [contact] = await tx.select().from(contacts).where(eq(contacts.id, contactId));
     const [instance] = await tx.select().from(whatsappInstances);
     const [tenant] = await tx.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
     const recent = await tx
-      .select({ author: messages.author, body: messages.body, sentAt: messages.sentAt })
+      .select({ author: messages.author, body: messages.body, sentAt: messages.sentAt, handoff: messages.handoff })
       .from(messages)
       .where(eq(messages.contactId, contactId))
       .orderBy(desc(messages.sentAt))
@@ -116,6 +124,7 @@ async function deliver(
   text: string,
   sentAt: Date,
   send: typeof sendText,
+  handoff = false,
 ): Promise<void> {
   let sent: { id: string };
   try {
@@ -127,8 +136,8 @@ async function deliver(
   await withTenant(tenantId, (tx) =>
     tx
       .insert(messages)
-      .values({ tenantId, contactId, direction: "out", author: "bot", body: text, waMessageId: sent.id, sentAt })
-      .onConflictDoUpdate({ target: [messages.tenantId, messages.waMessageId], set: { author: "bot", sentAt } }),
+      .values({ tenantId, contactId, direction: "out", author: "bot", body: text, waMessageId: sent.id, sentAt, handoff })
+      .onConflictDoUpdate({ target: [messages.tenantId, messages.waMessageId], set: { author: "bot", sentAt, handoff } }),
   );
   await withTenant(tenantId, (tx) =>
     tx.update(contacts).set({ lastMessageAt: sql`greatest(${contacts.lastMessageAt}, now())` }).where(eq(contacts.id, contactId)),
@@ -197,12 +206,8 @@ export async function runConversation(
   const introduce = rt.discloseAi && (!conv.lastBotAt || now.getTime() - conv.lastBotAt.getTime() > INTRO_GAP_MS);
   const facts = await recentFacts(tenantId);
   const system = buildSystemPrompt({ ...rt, tenantName: conv.tenantName, introduce, now, facts, stage: conv.contact.stage });
-  // Providers expect the conversation to open with the user: drop leading bot/admin turns.
-  const firstCustomer = conv.recent.findIndex((m) => m.author === "customer");
-  const history: ModelMessage[] = conv.recent.slice(firstCustomer).map((m) => ({
-    role: m.author === "customer" ? "user" : "assistant",
-    content: m.body,
-  }));
+  const history = toModelMessages(conv.recent.map(toTurn), { toolCalls: true });
+  let handedOff = false;
 
   const reply = await generateOrRecord(tenantId, rt, deps.model, {
     system,
@@ -212,6 +217,7 @@ export async function runConversation(
       notify: (t) => notifyAdmin(tenantId, t, { send }),
       scheduleReminder: deps.scheduleReminder ?? ((id) => enqueueReminder(tenantId, id)),
       pauseHours: rt.pauseHours,
+      onHandoff: () => (handedOff = true),
     }),
   });
   if (reply === "skipped:key-invalid" || reply === "skipped:model-error" || reply === "skipped:quota") return reply;
@@ -224,7 +230,7 @@ export async function runConversation(
   const cutoff = conv.recent.at(-1)!.sentAt;
   if (await adminWroteSince(tenantId, contactId, cutoff)) return "skipped:not-customer-last";
 
-  await deliver(tenantId, contactId, { instance: conv.instance.name, jid: conv.contact.jid }, text, new Date(cutoff.getTime() + 1), send);
+  await deliver(tenantId, contactId, { instance: conv.instance.name, jid: conv.contact.jid }, text, new Date(cutoff.getTime() + 1), send, handedOff);
   return "sent";
 }
 
@@ -278,11 +284,8 @@ async function relayToCustomer(
     facts: await recentFacts(tenantId),
     stage: conv.contact.stage,
   });
-  const firstCustomer = conv.recent.findIndex((m) => m.author === "customer");
-  const history: ModelMessage[] = (firstCustomer >= 0 ? conv.recent.slice(firstCustomer) : []).map((m) => ({
-    role: m.author === "customer" ? "user" : "assistant",
-    content: m.body,
-  }));
+  // No tools here, so no tool calls in the history either.
+  const history = toModelMessages(conv.recent.map(toTurn), { toolCalls: false });
   // Internal note as the last (user) turn: providers expect the conversation to end there.
   history.push({
     role: "user",
