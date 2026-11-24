@@ -44,7 +44,7 @@ describe("createOrder", () => {
     expect(r).toMatchObject({ success: true, data: { total: "27800.00", status: "pending", contactName: "Ana" } });
     expect([await stockOf(pan), await stockOf(med), await stockOf(torta)]).toEqual([8, 4, null]);
     await ownerSql`update products set price = 9999 where id = ${pan}`;
-    const [order] = await listOrders(t.id, { closed: false });
+    const [order] = await listOrders(t.id);
     expect(order.items.find((i) => i.productName === "Pan de campo")?.unitPrice).toBe("2500.00");
   });
 
@@ -58,7 +58,7 @@ describe("createOrder", () => {
       error: { code: "OUT_OF_STOCK", message: "No hay stock suficiente de Medialunas (quedan 0)", details: { productId: med } },
     });
     expect(await stockOf(pan)).toBe(10);
-    expect(await listOrders(t.id, { closed: false })).toEqual([]);
+    expect(await listOrders(t.id)).toEqual([]);
   });
 
   it("adds up repeated lines of the same product before checking stock", async () => {
@@ -153,6 +153,6 @@ describe("deliver and cancel", () => {
     const pan = await product(b.id, "Pan", 100, 5);
     const c = await buyer(b.id);
     await createOrder(b.id, input(c, [{ productId: pan, quantity: 1 }]));
-    expect(await listOrders(a.id, { closed: false })).toEqual([]);
+    expect(await listOrders(a.id)).toEqual([]);
   });
 });

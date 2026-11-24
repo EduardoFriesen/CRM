@@ -17,7 +17,9 @@ export function TenantNav({ slug }: { slug: string }) {
     router.refresh();
   }, [path, router]);
   const links = [
-    { href: `/t/${slug}`, label: "Clientes" },
+    { href: `/t/${slug}`, label: "Tablero" },
+    { href: `/t/${slug}/clientes`, label: "Clientes" },
+    { href: `/t/${slug}/ventas`, label: "Ventas" },
     { href: `/t/${slug}/catalogo`, label: "Catálogo" },
     { href: `/t/${slug}/agente`, label: "Agente" },
     { href: `/t/${slug}/aprendido`, label: "Aprendido" },

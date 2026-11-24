@@ -19,20 +19,12 @@ import { STAGE_LABELS } from "./stages";
 
 export const dynamic = "force-dynamic";
 
-export default async function BoardPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ slug: string }>;
-  searchParams: Promise<{ pedidos?: string }>;
-}) {
+export default async function BoardPage({ params }: { params: Promise<{ slug: string }> }) {
   const tenant = await getCurrentTenant((await params).slug);
-  const showClosed = (await searchParams).pedidos === "cerrados";
-  const [board, agent, pendingOrders, closedOrders, catalog] = await Promise.all([
+  const [board, agent, pendingOrders, catalog] = await Promise.all([
     listBoard(tenant.id),
     getAgentView(tenant.id),
-    listOrders(tenant.id, { closed: false }),
-    showClosed ? listOrders(tenant.id, { closed: true }) : Promise.resolve([]),
+    listOrders(tenant.id),
     listProducts(tenant.id),
   ]);
   const products: OrderProduct[] = catalog
@@ -46,7 +38,7 @@ export default async function BoardPage({
     <main className="page">
       <AutoRefresh />
       <div className="page-head">
-        <h1>Clientes</h1>
+        <h1>Tablero</h1>
         <p className="meta" aria-live="polite">
           {total === 1 ? "1 conversación" : `${total} conversaciones`} · se actualiza solo ·{" "}
           <BotStatus slug={tenant.slug} agent={agent} />
@@ -69,7 +61,7 @@ export default async function BoardPage({
           ))}
         </div>
       )}
-      <OrdersSection slug={tenant.slug} pending={pendingOrders} closed={closedOrders} showClosed={showClosed} now={now} />
+      <OrdersSection slug={tenant.slug} pending={pendingOrders} now={now} />
     </main>
   );
 }

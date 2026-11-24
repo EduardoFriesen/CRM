@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant, type Tx } from "@/db/client";
 import { contacts, orderItems, orders, products, type Order, type OrderItem } from "@/db/schema";
@@ -64,14 +64,9 @@ export async function loadViews(
   }));
 }
 
-export function listOrders(tenantId: string, opts: { closed: boolean }): Promise<OrderView[]> {
-  return withTenant(tenantId, (tx) =>
-    loadViews(
-      tx,
-      opts.closed ? sql`${orders.status} <> 'pending'` : eq(orders.status, "pending"),
-      opts.closed ? { orderBy: [desc(orders.createdAt)], limit: 50 } : {},
-    ),
-  );
+// Pending orders for the board; delivered and cancelled ones live in Ventas.
+export function listOrders(tenantId: string): Promise<OrderView[]> {
+  return withTenant(tenantId, (tx) => loadViews(tx, eq(orders.status, "pending")));
 }
 
 // Creates the order and takes the stock in one transaction: each product's stock is
