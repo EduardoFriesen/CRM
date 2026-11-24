@@ -200,6 +200,19 @@ describe("reopening", () => {
     expect((await state(jid)).reopened_at).not.toBeNull();
   });
 
+  it("the reopening message belongs to the new conversation", async () => {
+    const jid = "5491100000106@s.whatsapp.net";
+    await seed(jid, "postventa", { closed: true });
+    // WhatsApp timestamps have second precision, so the message is usually older than now().
+    const msg = upsert({ remoteJid: jid });
+    msg.data.messageTimestamp = Math.floor(Date.now() / 1000) - 1;
+    await handleEvolutionEvent(tenant.slug, SECRET, msg);
+    const [row] = await ownerSql<{ n: number }[]>`
+      select count(*)::int as n from messages m join contacts c on c.id = m.contact_id
+      where c.tenant_id = ${tenant.id} and c.jid = ${jid} and m.sent_at >= c.reopened_at`;
+    expect(row.n).toBe(1);
+  });
+
   it("a customer message reopens an idle consulta", async () => {
     const jid = "5491100000102@s.whatsapp.net";
     await seed(jid, "consulta", { idle: "2 days" });

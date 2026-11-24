@@ -139,7 +139,7 @@ async function storeMessage(tenantId: string, d: Upsert): Promise<void> {
   }
 
   const contact = await withTenant(tenantId, async (tx) => {
-    if (!fromMe) await reopenContact(tx, tenantId, jid);
+    if (!fromMe) await reopenContact(tx, tenantId, jid, at);
     const [contact] = await tx
       .insert(contacts)
       .values({

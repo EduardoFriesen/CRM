@@ -123,10 +123,12 @@ export async function closeContact(tenantId: string, id: string): Promise<Result
 // A customer writing to a contact that left the board (closed, or an idle consulta) starts
 // a new conversation: back to Consulta, bot unpaused, history from now. Call it before the
 // webhook's upsert bumps last_message_at, and only for the customer's own messages.
-export async function reopenContact(tx: Tx, tenantId: string, jid: string): Promise<void> {
+// `at` is that message's time: the conversation starts with it (WhatsApp timestamps have
+// second precision, so now() would leave the message itself out of the history).
+export async function reopenContact(tx: Tx, tenantId: string, jid: string, at: Date): Promise<void> {
   await tx
     .update(contacts)
-    .set({ closedAt: null, reopenedAt: sql`now()`, stage: "consulta", botPausedUntil: null })
+    .set({ closedAt: null, reopenedAt: at, stage: "consulta", botPausedUntil: null })
     .where(
       and(
         eq(contacts.tenantId, tenantId),
