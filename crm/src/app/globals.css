@@ -221,6 +221,7 @@ input[aria-invalid="true"] {
 }
 .tenant-header nav {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-1);
   margin-left: auto;
 }

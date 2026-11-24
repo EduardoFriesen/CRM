@@ -22,6 +22,7 @@ export function TenantNav({ slug }: { slug: string }) {
     { href: `/t/${slug}/agente`, label: "Agente" },
     { href: `/t/${slug}/aprendido`, label: "Aprendido" },
     { href: `/t/${slug}/whatsapp`, label: "WhatsApp" },
+    { href: `/t/${slug}/configuracion`, label: "Configuración" },
   ];
   return (
     <nav aria-label="Secciones del negocio">

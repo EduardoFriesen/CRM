@@ -41,3 +41,19 @@ export async function getCurrentTenant(value: string): Promise<Tenant> {
   if (!tenant) notFound();
   return tenant;
 }
+
+const IDLE_DAYS = "Entre 1 y 30 días";
+const boardSettings = z.object({
+  consultaIdleDays: z.coerce.number({ error: IDLE_DAYS }).int(IDLE_DAYS).min(1, IDLE_DAYS).max(30, IDLE_DAYS),
+});
+
+export async function saveBoardSettings(tenantId: string, input: unknown): Promise<Result<{ consultaIdleDays: number }>> {
+  const parsed = boardSettings.safeParse(input);
+  if (!parsed.success) return fail("VALIDATION", "Revisá la configuración", z.flattenError(parsed.error).fieldErrors);
+  const [row] = await getDb()
+    .update(tenants)
+    .set({ consultaIdleDays: parsed.data.consultaIdleDays })
+    .where(eq(tenants.id, tenantId))
+    .returning({ consultaIdleDays: tenants.consultaIdleDays });
+  return row ? ok(row) : fail("NOT_FOUND", "No encontramos el negocio");
+}
