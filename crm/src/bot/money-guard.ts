@@ -1,3 +1,5 @@
+import { plain } from "@/lib/plain";
+
 // Conservative: a false positive only means an answer isn't learned; a false negative
 // would let the bot learn (and repeat) a price. Matched on lowercase, accent-free text.
 const MONEY_WORDS =
@@ -7,9 +9,6 @@ const CURRENCY = /(\$\s?\d|u\$s|us\$|ar\$|%)/;
 const AMOUNTS = /(\b\d{1,3}(\.\d{3})+\b|\b\d{4,}\b|\b\d{3,}\s+(el|la|los|las|c\/u|cada|por|x)\b)/;
 
 export function mentionsMoney(text: string): boolean {
-  const plain = text
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase();
-  return CURRENCY.test(plain) || MONEY_WORDS.test(plain) || AMOUNTS.test(plain);
+  const p = plain(text);
+  return CURRENCY.test(p) || MONEY_WORDS.test(p) || AMOUNTS.test(p);
 }
