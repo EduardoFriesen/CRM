@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { reactivateBot, setContactStage } from "@/contacts/contacts";
+import { closeContact, reactivateBot, setContactStage } from "@/contacts/contacts";
 import { cancelOrder, createOrder, deliverOrder, type OrderView } from "@/orders/orders";
 import type { Result } from "@/lib/result";
 import type { Stage } from "@/db/schema";
@@ -17,6 +17,13 @@ export async function changeStage(slug: string, contactId: string, stage: string
 export async function reactivateAction(slug: string, contactId: string): Promise<Result<{ id: string }>> {
   const tenant = await getCurrentTenant(slug);
   const result = await reactivateBot(tenant.id, contactId);
+  if (result.success) revalidatePath(`/t/${tenant.slug}`);
+  return result;
+}
+
+export async function closeContactAction(slug: string, contactId: string): Promise<Result<{ id: string }>> {
+  const tenant = await getCurrentTenant(slug);
+  const result = await closeContact(tenant.id, contactId);
   if (result.success) revalidatePath(`/t/${tenant.slug}`);
   return result;
 }

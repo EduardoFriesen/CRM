@@ -430,6 +430,7 @@ input[aria-invalid="true"] {
 }
 
 .card {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -493,6 +494,36 @@ a.card-main:hover {
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3) var(--space-3);
   border-top: 1px solid var(--line);
+}
+/* Consulta cards: × in the corner; the title leaves room for it. */
+.card:has(.card-dismiss) .card-title {
+  padding-right: 36px;
+}
+button.card-dismiss {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-lg);
+  font-weight: 400;
+  line-height: 1;
+}
+button.card-dismiss:hover:not(:disabled) {
+  background: var(--panel);
+  color: var(--ink);
+}
+.card-error {
+  display: block;
+  margin: 0 var(--space-3) var(--space-2);
+  color: var(--danger);
+  font-size: var(--text-xs);
 }
 .card-foot select {
   min-height: 32px;

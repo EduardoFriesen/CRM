@@ -12,6 +12,7 @@ import { getCurrentTenant } from "@/tenants/tenants";
 import { CreateOrderButton, type OrderProduct } from "./order-form";
 import { OrdersSection } from "./orders-section";
 import { AutoRefresh } from "./auto-refresh";
+import { CloseContactButton } from "./close-contact-button";
 import { ReactivateButton } from "./reactivate-button";
 import { StageSelect } from "./stage-select";
 import { STAGE_LABELS } from "./stages";
@@ -172,6 +173,7 @@ function Card({
       ) : (
         <div className="card-main">{body}</div>
       )}
+      {stage === "consulta" && <CloseContactButton slug={slug} contactId={contact.id} name={name} variant="dismiss" />}
       {paused && (
         <p className="card-paused">
           Bot pausado hasta <time dateTime={contact.botPausedUntil!.toISOString()}>{pauseClock.format(contact.botPausedUntil!)}</time>
@@ -182,6 +184,7 @@ function Card({
         {stage === "venta" && (
           <CreateOrderButton slug={slug} contactId={contact.id} contactName={name} products={products} today={today} />
         )}
+        {stage === "postventa" && <CloseContactButton slug={slug} contactId={contact.id} name={name} variant="sale" />}
         {paused && <ReactivateButton slug={slug} contactId={contact.id} />}
       </div>
     </article>

@@ -88,3 +88,27 @@ test("a paused card says until when and can be reactivated", async ({ page }) =>
   await card.getByRole("button", { name: "Reactivar bot" }).click();
   await expect(card).not.toContainText("Bot pausado hasta");
 });
+
+test("Cerrar venta removes a postventa card", async ({ page }) => {
+  const [t] = await sql<{ id: string }[]>`select id from tenants where slug = ${slug}`;
+  const [dora] = await sql<{ id: string }[]>`insert into contacts (tenant_id, jid, phone, name, stage, last_message_at)
+    values (${t.id}, '5491122999001@s.whatsapp.net', '5491122999001', 'Dora', 'postventa', now()) returning id`;
+  await sql`insert into orders (tenant_id, contact_id, status, delivery_date, address, total, delivered_at)
+    values (${t.id}, ${dora.id}, 'delivered', current_date, 'Calle 1', 100, now())`;
+  await page.goto(`/t/${slug}`);
+  const card = page.getByRole("article").filter({ hasText: "Dora" });
+  await expect(page.getByRole("heading", { name: "Postventa 1", exact: true })).toBeVisible();
+  await card.getByRole("button", { name: "Cerrar venta" }).click();
+  await expect(card).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Postventa 0", exact: true })).toBeVisible();
+});
+
+test("the × removes a consulta card", async ({ page }) => {
+  const [t] = await sql<{ id: string }[]>`select id from tenants where slug = ${slug}`;
+  await sql`insert into contacts (tenant_id, jid, phone, name, last_message_at)
+    values (${t.id}, '5491122999002@s.whatsapp.net', '5491122999002', 'Elsa', now())`;
+  await page.goto(`/t/${slug}`);
+  const card = page.getByRole("article").filter({ hasText: "Elsa" });
+  await card.getByRole("button", { name: "Quitar a Elsa del tablero" }).click();
+  await expect(card).toHaveCount(0);
+});
