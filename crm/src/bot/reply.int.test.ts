@@ -216,6 +216,38 @@ describe("runConversation", () => {
     expect(JSON.stringify(second.doGenerateCalls[0].prompt)).not.toContain("asistente virtual de");
   });
 
+  it("after a reopen, the model only sees messages since reopened_at", async () => {
+    const { t, c } = await setup();
+    await say(t.id, c.id, "customer", "Quiero 50 m2 de gramilla", 3 * 24 * 60);
+    await say(t.id, c.id, "bot", "Te atiende alguien del equipo.", 3 * 24 * 60 - 1);
+    await ownerSql`update contacts set reopened_at = now() - interval '1 minute' where id = ${c.id}`;
+    await say(t.id, c.id, "customer", "Hola");
+    const model = new MockLanguageModelV4({ doGenerate: text("¡Hola!") });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    const prompt = JSON.stringify(model.doGenerateCalls[0].prompt);
+    expect(prompt).toContain("Hola");
+    expect(prompt).not.toContain("gramilla");
+  });
+
+  it("introduces itself again after a reopen", async () => {
+    const { t, c } = await setup();
+    await say(t.id, c.id, "customer", "Hola", 60);
+    await say(t.id, c.id, "bot", "¡Hola! Soy el asistente virtual.", 59);
+    await ownerSql`update contacts set reopened_at = now() - interval '1 minute' where id = ${c.id}`;
+    await say(t.id, c.id, "customer", "¿Tienen pan?");
+    const model = new MockLanguageModelV4({ doGenerate: text("Sí") });
+    await runConversation(t.id, c.id, { model, send: sendOk() });
+    expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain("asistente virtual de");
+  });
+
+  it("keeps the hourly reply cap across a reopen", async () => {
+    const { t, c } = await setup();
+    for (let i = 0; i < 20; i++) await say(t.id, c.id, "bot", `r${i}`, 30);
+    await ownerSql`update contacts set reopened_at = now() - interval '1 minute' where id = ${c.id}`;
+    await say(t.id, c.id, "customer", "Hola");
+    expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send: sendOk() })).toBe("skipped:rate-limit");
+  });
+
   it("records the error code and rethrows transient failures so the queue retries", async () => {
     const { t, c } = await setup();
     await say(t.id, c.id, "customer", "Hola");

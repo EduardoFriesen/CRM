@@ -1,5 +1,5 @@
 import { APICallError, generateText, isStepCount, RetryError, type LanguageModel, type ModelMessage, type ToolSet } from "ai";
-import { and, desc, eq, gt, max, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, max, sql } from "drizzle-orm";
 import { getAgentRuntime, markKeyInvalid, recordAgentError } from "@/agent/config";
 import { createModel, isAuthError, isQuotaExhausted } from "@/agent/model";
 import { withTenant } from "@/db/client";
@@ -97,17 +97,22 @@ async function loadConversation(tenantId: string, contactId: string, now: Date) 
     const [contact] = await tx.select().from(contacts).where(eq(contacts.id, contactId));
     const [instance] = await tx.select().from(whatsappInstances);
     const [tenant] = await tx.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
+    // After a reopen the conversation starts over: older messages are a finished one.
+    const since = contact?.reopenedAt ? gte(messages.sentAt, contact.reopenedAt) : undefined;
     const recent = await tx
       .select({ author: messages.author, body: messages.body, sentAt: messages.sentAt, handoff: messages.handoff })
       .from(messages)
-      .where(eq(messages.contactId, contactId))
+      .where(and(eq(messages.contactId, contactId), since))
       .orderBy(desc(messages.sentAt))
       .limit(HISTORY);
     const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
     const [{ botLastHour, lastBotAt }] = await tx
       .select({
         botLastHour: sql<number>`count(*) filter (where ${messages.sentAt} > ${hourAgo.toISOString()}::timestamptz)`.mapWith(Number),
-        lastBotAt: max(messages.sentAt),
+        // Introductions count only from the reopen; the hourly cap counts everything.
+        lastBotAt: contact?.reopenedAt
+          ? sql<Date | null>`max(${messages.sentAt}) filter (where ${messages.sentAt} >= ${contact.reopenedAt.toISOString()}::timestamptz)`.mapWith(messages.sentAt)
+          : max(messages.sentAt),
       })
       .from(messages)
       .where(and(eq(messages.contactId, contactId), eq(messages.author, "bot"), gt(messages.sentAt, sql`now() - interval '2 days'`)));
