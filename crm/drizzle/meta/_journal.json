@@ -127,6 +127,20 @@
       "when": 1795473263808,
       "tag": "0017_provider_ollama",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795521044539,
+      "tag": "0018_board_active_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795521045056,
+      "tag": "0019_board_active_tasks_grants",
+      "breakpoints": true
     }
   ]
 }

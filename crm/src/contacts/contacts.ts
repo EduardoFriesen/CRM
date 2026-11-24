@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { contacts, STAGES, type Stage } from "@/db/schema";
@@ -14,6 +14,13 @@ export type BoardContact = {
   hasDeliveredOrder: boolean;
 };
 export type Board = Record<Stage, BoardContact[]>;
+
+// A consulta nobody wrote in for longer than the tenant's consulta_idle_days: off the board,
+// and a new conversation if the customer writes again. A filter, not a job: changing the
+// setting applies at once, also to contacts already hidden.
+// A contact without messages (last_message_at null) is not idle.
+export const idleConsulta = sql`coalesce(${contacts.stage} = 'consulta' and ${contacts.lastMessageAt} < now() - make_interval(days => (
+  select t.consulta_idle_days from tenants t where t.id = ${contacts.tenantId})), false)`;
 
 export async function listBoard(tenantId: string): Promise<Board> {
   const rows = await withTenant(tenantId, (tx) =>
@@ -35,6 +42,7 @@ export async function listBoard(tenantId: string): Promise<Board> {
           order by m.sent_at desc limit 1)`,
       })
       .from(contacts)
+      .where(and(isNull(contacts.closedAt), sql`not ${idleConsulta}`))
       .orderBy(sql`${contacts.lastMessageAt} desc nulls last`, desc(contacts.createdAt)),
   );
   const board: Board = { consulta: [], venta: [], postventa: [] };
@@ -82,4 +90,29 @@ export async function reactivateBot(tenantId: string, id: string): Promise<Resul
       .returning({ id: contacts.id }),
   );
   return row ? ok(row) : fail("NOT_FOUND", "No encontramos ese cliente");
+}
+
+// Takes a finished conversation off the board: Postventa ("Cerrar venta") or Consulta (×).
+// Venta stays until the admin moves it. Nothing is deleted.
+export async function closeContact(tenantId: string, id: string): Promise<Result<{ id: string }>> {
+  if (!contactId.safeParse(id).success) return fail("NOT_FOUND", "No encontramos ese cliente");
+  return withTenant(tenantId, async (tx) => {
+    const [row] = await tx
+      .update(contacts)
+      .set({ closedAt: sql`now()` })
+      .where(
+        and(
+          eq(contacts.id, id),
+          eq(contacts.tenantId, tenantId),
+          inArray(contacts.stage, ["consulta", "postventa"]),
+          isNull(contacts.closedAt),
+        ),
+      )
+      .returning({ id: contacts.id });
+    if (row) return ok(row);
+    const [exists] = await tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, id));
+    return exists
+      ? fail("NOT_CLOSABLE", "Solo se sacan del tablero clientes en Consulta o Postventa")
+      : fail("NOT_FOUND", "No encontramos ese cliente");
+  });
 }

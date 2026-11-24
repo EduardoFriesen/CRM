@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, date, integer, numeric, pgEnum, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, integer, numeric, pgEnum, pgTable, primaryKey, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 export const STAGES = ["consulta", "venta", "postventa"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -21,8 +21,10 @@ export const tenants = pgTable("tenants", {
   slug: text().notNull().unique(),
   name: text().notNull(),
   adminPhone: text("admin_phone").notNull(),
+  // Consultas without activity for longer than this leave the board.
+  consultaIdleDays: smallint("consulta_idle_days").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [check("tenants_consulta_idle_days_range", sql`${t.consultaIdleDays} between 1 and 30`)]);
 
 const tenantId = () =>
   uuid("tenant_id")
@@ -48,6 +50,11 @@ export const contacts = pgTable(
     stage: stage().notNull().default("consulta"),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
     botPausedUntil: timestamp("bot_paused_until", { withTimezone: true }),
+    // Off the board (null = on it); a customer message reopens it as a new conversation.
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    // The bot's conversation starts here after a reopen.
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+    reachedVentaAt: timestamp("reached_venta_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique().on(t.tenantId, t.jid)],
@@ -67,6 +74,8 @@ export const messages = pgTable(
     body: text().notNull(),
     waMessageId: text("wa_message_id").notNull(),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),
+    // A bot reply sent in the same turn as handoff_to_admin: replayed to the model as a tool call.
+    handoff: boolean().notNull().default(false),
   },
   (t) => [unique().on(t.tenantId, t.waMessageId)],
 );
