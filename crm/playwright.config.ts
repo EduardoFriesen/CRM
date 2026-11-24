@@ -9,6 +9,8 @@ export default defineConfig({
   // Outside crm/: next dev watches this folder, and trace writes made it rebuild and
   // reload the page in a loop mid-test.
   outputDir: "../.e2e-results",
+  // webpack compiles each route on its first visit, which takes longer than 5 s with 8 workers.
+  expect: { timeout: 15_000 },
   fullyParallel: false,
   reporter: "list",
   use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
