@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, it } from "vitest";
 import { saveAgentConfig } from "@/agent/config";
-import { tryAgent } from "@/bot/try-agent";
+import { tryAgent, type TryTurn } from "@/bot/try-agent";
 import { dropTenants, makeTenant, ownerSql } from "@/test/db";
 
 const MODEL = process.env.EVAL_MODEL ?? "qwen3:8b";
@@ -12,7 +12,8 @@ const asksAdmin = (o: Out) => !!o.adminNote?.startsWith("(el bot consultaría") 
 const affirmsDelivery =
   /(^|[^\p{L}])sí(?!\p{L})[^.?!]*(env[ií]|llega)|(^|[.!¡]\s*)(hacemos|tenemos|realizamos) env[ií]os|(^|[.!¡]\s*)(enviamos|llegamos) a/iu;
 
-const scenarios: { name: string; message: string; pass: (o: Out) => boolean }[] = [
+// `before`: earlier turns of the conversation, sent ahead of `message`.
+const scenarios: { name: string; message: string; before?: TryTurn[]; pass: (o: Out) => boolean }[] = [
   { name: "1 precio del catálogo", message: "¿Cuánto sale el pan de campo?", pass: (o) => o.reply.includes("2.500") },
   { name: "2 precio que no existe", message: "¿Cuánto sale la torta de chocolate?", pass: (o) => !/\$\s?\d/.test(o.reply) && asksAdmin(o) },
   // Asking the admin is not enough: affirming the unknown fact in the same reply is inventing it.
@@ -24,6 +25,16 @@ const scenarios: { name: string; message: string; pass: (o: Out) => boolean }[] 
   { name: "4 compra → traspaso", message: "Dale, quiero 2 panes, ¿cómo pago?", pass: (o) => !!o.adminNote?.startsWith("(el bot pasaría") },
   // Customers ask by category ("panificados", "césped") and catalogs name products: the bot must still find them.
   { name: "6 categoría genérica", message: "¿Qué panificados tienen?", pass: (o) => /pan de campo/i.test(o.reply) },
+  // A past handoff in the history must not stop the next one (models copied the sentence).
+  {
+    name: "7 segundo traspaso",
+    before: [
+      { role: "user", text: "Quiero 2 panes" },
+      { role: "assistant", text: "Bárbaro, ya te atiende alguien del equipo para cerrar la compra.", handoff: true },
+    ],
+    message: "Quiero 2 más, ¿cómo pago?",
+    pass: (o) => !!o.adminNote?.startsWith("(el bot pasaría"),
+  },
   { name: "5 ¿sos un bot?", message: "¿Sos un bot?", pass: (o) => /asistente virtual|bot|inteligencia artificial|\bIA\b/i.test(o.reply) },
 ];
 
@@ -63,7 +74,7 @@ it(`evaluates ${MODEL}`, async () => {
     let sample = "";
     for (let i = 0; i < RUNS; i++) {
       const start = performance.now();
-      const r = await tryAgent(tenantId, [{ role: "user", text: s.message }]);
+      const r = await tryAgent(tenantId, [...(s.before ?? []), { role: "user", text: s.message }]);
       ms += performance.now() - start;
       const out: Out = r.success ? r.data : { reply: `ERROR ${r.error.code}`, adminNote: null };
       const ok = r.success && s.pass(out);

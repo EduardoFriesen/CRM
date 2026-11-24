@@ -46,6 +46,7 @@ Flujo:
 - **Consultas al admin:** si al bot le falta un dato, se lo pregunta al **WhatsApp del administrador** (se configura en Agente) y al cliente le dice "lo consulto y te aviso". **Respondé citando el mensaje de la consulta**: el bot le transmite la respuesta al cliente con sus palabras y la guarda en **Aprendido** para la próxima vez. **Los precios nunca se aprenden**: si la consulta es de precios o tu respuesta menciona plata, se transmite pero no se guarda (los precios van en el Catálogo). Si no respondés en 2 h, te llega un recordatorio una sola vez. Las consultas pendientes se ven en Aprendido.
 - **Traspaso:** cuando el cliente quiere cerrar la compra, el bot le avisa que lo atiende alguien del equipo, mueve la tarjeta a Venta, te avisa por WhatsApp y se **pausa en esa charla** (12 h por defecto, configurable en Agente). Atendé desde el WhatsApp del negocio. Si escribís vos desde el número del negocio en cualquier charla, también se pausa. La tarjeta muestra "Bot pausado hasta …" y el botón **Reactivar bot**. Los mensajes que llegan durante la pausa no se contestan después.
 - **El número del administrador** nunca aparece como cliente ni recibe respuestas del bot.
+- **El tablero muestra lo que hay que atender ahora.** En Postventa, **Cerrar venta** saca al cliente del tablero; en Consulta, la **×** de la esquina hace lo mismo. Las Consultas sin mensajes durante más de N días (1 por defecto, se cambia en **Configuración**) dejan de mostrarse solas. Nada se borra: si ese cliente vuelve a escribir, reaparece en Consulta como una **conversación nueva** (el bot no ve la charla anterior y se vuelve a presentar). Tus mensajes desde el número del negocio no lo reabren. Las tarjetas en Venta no se sacan: siguen hasta que las movés o hay pedido.
 - **Etapas:** **Consulta** es un contacto nuevo o un cliente en Postventa que vuelve a querer comprar (lo detecta el bot, que es lo único que mueve por su cuenta); **Venta** llega solo con el traspaso, cuando hace falta el admin para cerrar; **Postventa** solo con **Marcar entregado**, que además saca la pausa del traspaso y el bot vuelve a atender esa charla.
 - **Diagnóstico:** `docker compose logs crm-worker` muestra por respuesta solo ids, resultado (`sent`, `skipped:...`) y duración; nunca textos ni teléfonos. El último error del bot también aparece en la pantalla Agente.
 
@@ -106,7 +107,7 @@ App CRM (requiere Node 24 y Postgres publicado en `127.0.0.1:55432` solo para de
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
 cd crm && npm ci
 npx vitest run            # unitarios + integracion (aplica migraciones con el rol crm)
-npx playwright install chromium && npx playwright test   # E2E contra next dev en localhost:3100
+npx playwright install chromium && npx playwright test   # E2E contra next dev (webpack) en localhost:3100; trazas en ../.e2e-results
 npm run lint && npm run typecheck
 ```
 
