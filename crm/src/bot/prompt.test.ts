@@ -34,6 +34,10 @@ describe("buildSystemPrompt", () => {
     expect(p).toMatch(/no ofrezcas/i);
   });
 
+  it("hands off when the customer picks how to pay or receive the order", () => {
+    expect(buildSystemPrompt(base)).toMatch(/elige cómo pagar o cómo recibirlo/i);
+  });
+
   it("adds the introduction only when asked", () => {
     expect(buildSystemPrompt({ ...base, introduce: true })).toContain("asistente virtual de Panadería Pepe");
     expect(buildSystemPrompt(base)).not.toContain("asistente virtual de Panadería Pepe");

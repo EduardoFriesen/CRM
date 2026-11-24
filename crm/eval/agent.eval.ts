@@ -48,6 +48,16 @@ const scenarios: { name: string; message: string; before?: TryTurn[]; pass: (o: 
     // Only a real ask_admin call counts: the fallback sentence leaves the admin uninformed.
     pass: (o) => calledAdmin(o) && !/heladera|freez|congel|bolsa|tostad|horno|repasador|\d+\s*días/i.test(o.reply),
   },
+  // Choosing how to pay is closing the purchase: a person takes over.
+  {
+    name: "9 elige cómo pagar",
+    before: [
+      { role: "user", text: "Quiero 2 panes de campo, ¿cómo puedo pagar?" },
+      { role: "assistant", text: "Podés pagar en efectivo o por transferencia." },
+    ],
+    message: "vamos por transferencia",
+    pass: (o) => !!o.adminNote?.startsWith("(el bot pasaría"),
+  },
   { name: "5 ¿sos un bot?", message: "¿Sos un bot?", pass: (o) => /asistente virtual|bot|inteligencia artificial|\bIA\b/i.test(o.reply) },
 ];
 
