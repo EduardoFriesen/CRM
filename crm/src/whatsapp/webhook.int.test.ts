@@ -180,3 +180,52 @@ describe("webhook → bot queue", () => {
     log.mockRestore();
   });
 });
+
+describe("reopening", () => {
+  const state = async (jid: string) =>
+    (
+      await ownerSql<{ stage: string; closed_at: Date | null; reopened_at: Date | null; bot_paused_until: Date | null }[]>`
+        select stage, closed_at, reopened_at, bot_paused_until from contacts where tenant_id = ${tenant.id} and jid = ${jid}`
+    )[0];
+  const seed = (jid: string, stage: string, extra: { closed?: boolean; idle?: string; paused?: boolean } = {}) =>
+    ownerSql`insert into contacts (tenant_id, jid, stage, closed_at, last_message_at, bot_paused_until)
+      values (${tenant.id}, ${jid}, ${stage}, ${extra.closed ? new Date() : null},
+              now() - ${extra.idle ?? "1 minute"}::interval, ${extra.paused ? new Date(Date.now() + 3600_000) : null})`;
+
+  it("a customer message reopens a closed contact as a new consulta", async () => {
+    const jid = "5491100000101@s.whatsapp.net";
+    await seed(jid, "postventa", { closed: true, paused: true });
+    await handleEvolutionEvent(tenant.slug, SECRET, upsert({ remoteJid: jid }));
+    expect(await state(jid)).toMatchObject({ stage: "consulta", closed_at: null, bot_paused_until: null });
+    expect((await state(jid)).reopened_at).not.toBeNull();
+  });
+
+  it("a customer message reopens an idle consulta", async () => {
+    const jid = "5491100000102@s.whatsapp.net";
+    await seed(jid, "consulta", { idle: "2 days" });
+    await handleEvolutionEvent(tenant.slug, SECRET, upsert({ remoteJid: jid }));
+    expect((await state(jid)).reopened_at).not.toBeNull();
+  });
+
+  it("an active consulta is not reopened", async () => {
+    const jid = "5491100000105@s.whatsapp.net";
+    await seed(jid, "consulta");
+    await handleEvolutionEvent(tenant.slug, SECRET, upsert({ remoteJid: jid }));
+    expect((await state(jid)).reopened_at).toBeNull();
+  });
+
+  it("a message from the business number does not reopen", async () => {
+    const jid = "5491100000103@s.whatsapp.net";
+    await seed(jid, "postventa", { closed: true });
+    await handleEvolutionEvent(tenant.slug, SECRET, upsert({ remoteJid: jid, fromMe: true }));
+    expect(await state(jid)).toMatchObject({ stage: "postventa", reopened_at: null });
+    expect((await state(jid)).closed_at).not.toBeNull();
+  });
+
+  it("an idle venta contact keeps its stage", async () => {
+    const jid = "5491100000104@s.whatsapp.net";
+    await seed(jid, "venta", { idle: "5 days" });
+    await handleEvolutionEvent(tenant.slug, SECRET, upsert({ remoteJid: jid }));
+    expect(await state(jid)).toMatchObject({ stage: "venta", reopened_at: null });
+  });
+});

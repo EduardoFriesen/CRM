@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isBotActive } from "@/agent/config";
 import { HINT_TEXT, NO_MATCH_TEXT, notifyAdmin } from "@/bot/admin-messages";
 import { enqueueCheckAdmin, enqueueReply } from "@/bot/queue";
+import { reopenContact } from "@/contacts/contacts";
 import { answerEscalation } from "@/facts/facts";
 import { getDb, withTenant } from "@/db/client";
 import { agentConfigs, contacts, escalations, messages, tenants, whatsappInstances } from "@/db/schema";
@@ -138,6 +139,7 @@ async function storeMessage(tenantId: string, d: Upsert): Promise<void> {
   }
 
   const contact = await withTenant(tenantId, async (tx) => {
+    if (!fromMe) await reopenContact(tx, tenantId, jid);
     const [contact] = await tx
       .insert(contacts)
       .values({

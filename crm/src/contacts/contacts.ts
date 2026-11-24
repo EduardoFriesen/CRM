@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { withTenant } from "@/db/client";
+import { withTenant, type Tx } from "@/db/client";
 import { contacts, STAGES, type Stage } from "@/db/schema";
 import { fail, ok, type Result } from "@/lib/result";
 
@@ -115,4 +115,20 @@ export async function closeContact(tenantId: string, id: string): Promise<Result
       ? fail("NOT_CLOSABLE", "Solo se sacan del tablero clientes en Consulta o Postventa")
       : fail("NOT_FOUND", "No encontramos ese cliente");
   });
+}
+
+// A customer writing to a contact that left the board (closed, or an idle consulta) starts
+// a new conversation: back to Consulta, bot unpaused, history from now. Call it before the
+// webhook's upsert bumps last_message_at, and only for the customer's own messages.
+export async function reopenContact(tx: Tx, tenantId: string, jid: string): Promise<void> {
+  await tx
+    .update(contacts)
+    .set({ closedAt: null, reopenedAt: sql`now()`, stage: "consulta", botPausedUntil: null })
+    .where(
+      and(
+        eq(contacts.tenantId, tenantId),
+        eq(contacts.jid, jid),
+        sql`(${contacts.closedAt} is not null or ${idleConsulta})`,
+      ),
+    );
 }
