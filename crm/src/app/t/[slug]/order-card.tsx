@@ -7,14 +7,15 @@ export const fmtDay = (iso: string) => dayLabel.format(new Date(`${iso}T00:00:00
 
 const STATUS_LABEL: Record<OrderView["status"], string> = { pending: "Pendiente", delivered: "Entregado", cancelled: "Cancelado" };
 
-export function OrderCard({ order: o, slug }: { order: OrderView; slug: string }) {
+// readOnly: a record (customer history), so pending orders say so and get no actions.
+export function OrderCard({ order: o, slug, readOnly = false }: { order: OrderView; slug: string; readOnly?: boolean }) {
   const name = o.contactName ?? (o.contactPhone ? `+${o.contactPhone}` : "Cliente");
   return (
     <article className={`order-card status-${o.status}`}>
       <div className="order-head">
         <span className="card-name">{name}</span>
         <span className="order-date">
-          {o.status === "pending" ? `Entrega ${fmtDay(o.deliveryDate)}` : `${STATUS_LABEL[o.status]} · entrega ${fmtDay(o.deliveryDate)}`}
+          {o.status === "pending" && !readOnly ? `Entrega ${fmtDay(o.deliveryDate)}` : `${STATUS_LABEL[o.status]} · entrega ${fmtDay(o.deliveryDate)}`}
         </span>
       </div>
       <p className="order-address">
@@ -30,7 +31,7 @@ export function OrderCard({ order: o, slug }: { order: OrderView; slug: string }
         ))}
       </ul>
       <p className="order-total">Total {formatPrice(o.total)}</p>
-      {o.status === "pending" && <OrderActions slug={slug} orderId={o.id} contactName={name} />}
+      {o.status === "pending" && !readOnly && <OrderActions slug={slug} orderId={o.id} contactName={name} />}
     </article>
   );
 }

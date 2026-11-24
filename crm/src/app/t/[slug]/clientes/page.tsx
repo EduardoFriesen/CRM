@@ -113,7 +113,7 @@ function Customer({ c, orders, slug, now }: { c: CustomerRow; orders: OrderView[
           <ul className="order-cards">
             {orders.map((o) => (
               <li key={o.id}>
-                <OrderCard order={o} slug={slug} />
+                <OrderCard order={o} slug={slug} readOnly />
               </li>
             ))}
           </ul>

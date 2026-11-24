@@ -16,6 +16,8 @@ test.beforeAll(async () => {
     values (${t.id}, ${ana.id}, 'delivered', '2026-11-10', 'Calle 1', 5000, now()) returning id`;
   await sql`insert into order_items (tenant_id, order_id, product_name, unit_price, quantity, line_total)
     values (${t.id}, ${o.id}, 'Pan de campo', 2500, 2, 5000)`;
+  await sql`insert into orders (tenant_id, contact_id, status, delivery_date, address, total)
+    values (${t.id}, ${ana.id}, 'pending', '2026-12-01', 'Calle 1', 700)`;
 });
 test.afterAll(async () => {
   await sql`delete from tenants where slug = ${slug}`;
@@ -40,6 +42,9 @@ test("Clientes lists everyone with how far they got, and opens a purchase histor
   await ana.locator("summary").click();
   await expect(ana).toContainText("Pan de campo");
   await expect(ana).toContainText("Total gastado $5.000");
+  // The history is a record: pending orders are handled from the board.
+  await expect(ana).toContainText("Pendiente");
+  await expect(ana.getByRole("button")).toHaveCount(0);
 });
 
 test("Clientes filters by text and outcome", async ({ page }) => {
