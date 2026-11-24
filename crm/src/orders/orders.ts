@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant, type Tx } from "@/db/client";
 import { contacts, orderItems, orders, products, type Order, type OrderItem } from "@/db/schema";
@@ -36,14 +36,20 @@ class OutOfStock extends Error {
 
 const money = (n: number) => n.toFixed(2);
 
-async function loadViews(tx: Tx, where: ReturnType<typeof and> | undefined, order: "upcoming" | "closed"): Promise<OrderView[]> {
+// Orders with their contact and items. Default order: next delivery first.
+export async function loadViews(
+  tx: Tx,
+  where: SQL | undefined,
+  { orderBy = [asc(orders.deliveryDate), asc(orders.createdAt)], limit = 1000, offset = 0 }: { orderBy?: SQL[]; limit?: number; offset?: number } = {},
+): Promise<OrderView[]> {
   const rows = await tx
     .select({ order: orders, contactName: contacts.name, contactPhone: contacts.phone })
     .from(orders)
     .innerJoin(contacts, eq(contacts.id, orders.contactId))
     .where(where)
-    .orderBy(...(order === "upcoming" ? [asc(orders.deliveryDate), asc(orders.createdAt)] : [desc(orders.createdAt)]))
-    .limit(order === "closed" ? 50 : 1000);
+    .orderBy(...orderBy)
+    .limit(limit)
+    .offset(offset);
   if (rows.length === 0) return [];
   const items = await tx
     .select()
@@ -63,7 +69,7 @@ export function listOrders(tenantId: string, opts: { closed: boolean }): Promise
     loadViews(
       tx,
       opts.closed ? sql`${orders.status} <> 'pending'` : eq(orders.status, "pending"),
-      opts.closed ? "closed" : "upcoming",
+      opts.closed ? { orderBy: [desc(orders.createdAt)], limit: 50 } : {},
     ),
   );
 }
@@ -131,7 +137,7 @@ export async function createOrder(tenantId: string, input: unknown): Promise<Res
         })
         .returning({ id: orders.id });
       await tx.insert(orderItems).values(lines.map((l) => ({ ...l, tenantId, orderId: order.id })));
-      const [view] = await loadViews(tx, eq(orders.id, order.id), "upcoming");
+      const [view] = await loadViews(tx, eq(orders.id, order.id));
       return ok(view);
     });
   } catch (e) {
@@ -156,7 +162,7 @@ export async function deliverOrder(tenantId: string, id: string): Promise<Result
     if (!o) return fail<OrderView>("VALIDATION", NOT_PENDING);
     // Delivered: the customer is in postventa and the bot takes the chat back from the handoff.
     await tx.update(contacts).set({ stage: "postventa", botPausedUntil: null }).where(eq(contacts.id, o.contactId));
-    const [view] = await loadViews(tx, eq(orders.id, o.id), "upcoming");
+    const [view] = await loadViews(tx, eq(orders.id, o.id));
     return ok(view);
   });
 }
@@ -181,7 +187,7 @@ export async function cancelOrder(tenantId: string, id: string): Promise<Result<
         .set({ stock: sql`${products.stock} + ${l.quantity}` })
         .where(and(eq(products.id, l.productId!), isNotNull(products.stock)));
     }
-    const [view] = await loadViews(tx, eq(orders.id, o.id), "upcoming");
+    const [view] = await loadViews(tx, eq(orders.id, o.id));
     return ok(view);
   });
 }
