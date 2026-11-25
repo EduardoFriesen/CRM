@@ -2,7 +2,7 @@ import type { FaqName } from "./types";
 
 // One line of `plain` text: a courtesy word and/or only emojis/punctuation.
 export const TRIVIAL =
-  /^[\s\p{P}\p{S}\p{M}\u200d]*(?:(?:ok|oka|okey|gracias|muchas gracias|dale|listo|joya|genial|perfecto|buenisimo)[\s\p{P}\p{S}\p{M}\u200d]*)?$/u;
+  /^[\s\p{P}\p{S}\p{M}\u200d]*(?:(?:ok|oka|okey|gracias|muchas gracias|dale|listo|joya|genial|perfecto|buenisimo)[\s\p{P}\p{S}\p{M}\u200d]*)*$/u;
 
 // Order matters: paying must be a handoff before "mercado pago" reads as payment info.
 export const RULES: { pattern: RegExp; fn: FaqName }[] = [

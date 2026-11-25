@@ -25,11 +25,11 @@ const SCHEMAS = {
 
 const DESCRIPTIONS: Record<keyof typeof SCHEMAS, string> = {
   price: "The customer asks the price of a product.",
-  stock: "The customer asks whether a product is available.",
+  stock: "The customer asks whether a product is available (not its ingredients, allergens or features).",
   hours: "The customer asks the opening hours.",
   location: "The customer asks where the business is or how to get there.",
   payment_methods: "The customer asks which payment methods are accepted.",
-  shipping: "The customer asks about shipping or delivery, optionally for a zone.",
+  shipping: "General questions about whether you ship, zones or shipping cost (not complaints or questions about a specific order).",
   handoff: "The customer wants to buy, pay, reserve, talk to a person or complain.",
   unclear: "The message is too vague to tell what the customer wants.",
   complex: "Anything else that needs a real conversation.",
@@ -45,7 +45,8 @@ const TOOLS = Object.fromEntries(
 const INSTRUCTIONS = `Sos un clasificador de mensajes de clientes de un negocio por WhatsApp.
 Elegí exactamente una función según el ÚLTIMO mensaje del cliente; el contexto previo solo sirve para entenderlo.
 - price / stock: pregunta por el precio o la disponibilidad de un producto (indicá el producto).
-- hours, location, payment_methods, shipping: preguntas frecuentes sobre el negocio.
+- hours, location, payment_methods, shipping: preguntas frecuentes sobre el negocio. shipping es solo si hacen envíos, zonas o costo; un reclamo o consulta por un pedido concreto ("mi envío no llegó") es handoff.
+- Ingredientes, alérgenos o características de un producto no son stock: son complex.
 - handoff: quiere comprar, pagar, reservar, hablar con una persona o hacer un reclamo (indicá el motivo).
 - unclear: mensaje demasiado vago para saber qué quiere.
 - complex: cualquier otra cosa que requiera una conversación.

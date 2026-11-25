@@ -8,6 +8,13 @@ describe("prefilter", () => {
     }
   });
 
+  it("silences courtesy-only lines with several words", () => {
+    for (const t of ["ok gracias", "dale gracias", "listo, gracias!", "joya 👍"]) {
+      expect(prefilter(t, "Sale $2.500.")).toEqual({ kind: "silence" });
+    }
+    expect(prefilter("ok gracias, y cuanto sale el pan", "Sale $2.500.")).not.toEqual({ kind: "silence" });
+  });
+
   it("does not silence after a bot question", () => {
     expect(prefilter("dale", "¿Te lo reservo?")).toBeNull();
   });
