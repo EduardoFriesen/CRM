@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { listBoard, setBotOff } from "@/contacts/contacts";
-import { requestAttention } from "@/bot/tools";
+import { handOff, requestAttention } from "@/bot/tools";
+import { setContactStage } from "@/contacts/contacts";
 import { dropTenants, makeContact, makeTenant, ownerSql } from "@/test/db";
 
 afterAll(async () => {
@@ -50,5 +51,25 @@ describe("attention", () => {
       (${t.id}, ${c.id}, '2099-12-10', 'X', 1), (${t.id}, ${c.id}, '2099-12-01', 'X', 1) returning id`.then((r) => [r[1]]);
     const board = await listBoard(t.id);
     expect(board.venta[0]).toMatchObject({ botOff: true, attentionReason: "reclamo", pendingOrderId: late.id });
+  });
+
+  it("a sale handoff does not move a chat that needs attention", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await requestAttention(t.id, c.id, "Reclamo", {});
+    await handOff(t.id, c.id, "Quiere pagar", {});
+    expect(await row(c.id)).toMatchObject({ stage: "consulta", bot_off: true, attention_reason: "Reclamo" });
+  });
+
+  it("a contact with a pending order cannot go back to consulta", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await ownerSql`update contacts set stage = 'venta' where id = ${c.id}`;
+    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2099-12-01', 'X', 1)`;
+    expect(await setContactStage(t.id, c.id, "consulta")).toEqual({
+      success: false,
+      error: { code: "HAS_PENDING_ORDER", message: "Entregá o cancelá el pedido antes de volver a Consulta" },
+    });
+    expect(await row(c.id)).toMatchObject({ stage: "venta" });
   });
 });

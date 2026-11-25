@@ -160,8 +160,14 @@ export async function createOrder(tenantId: string, input: unknown): Promise<Res
 
   return refusals(() =>
     withTenant(tenantId, async (tx) => {
-      const [contact] = await tx.select({ stage: contacts.stage }).from(contacts).where(eq(contacts.id, data.contactId));
+      // The lock makes a concurrent close wait, so a closed contact never gets a new order.
+      const [contact] = await tx
+        .select({ stage: contacts.stage, closedAt: contacts.closedAt })
+        .from(contacts)
+        .where(eq(contacts.id, data.contactId))
+        .for("update");
       if (!contact) return fail<OrderView>("NOT_FOUND", "No encontramos ese cliente");
+      if (contact.closedAt) return fail<OrderView>("VALIDATION", "Ese cliente ya no está en el tablero");
       if (contact.stage !== "venta") return fail<OrderView>("VALIDATION", "Solo se crean pedidos para clientes en Venta");
 
       const { lines, total } = await takeLines(tx, data.items);

@@ -157,6 +157,20 @@ describe("deliver and cancel", () => {
   });
 });
 
+describe("createOrder on a closed contact", () => {
+  it("refuses a contact that left the board", async () => {
+    const t = await makeTenant();
+    const pan = await product(t.id, "Pan de campo", 2500, 10);
+    const c = await buyer(t.id);
+    await ownerSql`update contacts set closed_at = now() where id = ${c}`;
+    expect(await createOrder(t.id, input(c, [{ productId: pan, quantity: 1 }]))).toMatchObject({
+      success: false,
+      error: { code: "VALIDATION", message: "Ese cliente ya no está en el tablero" },
+    });
+    expect(await stockOf(pan)).toBe(10);
+  });
+});
+
 describe("updateOrder", () => {
   const edit = (items: { productId: string; quantity: number }[], over: object = {}) => ({
     items,

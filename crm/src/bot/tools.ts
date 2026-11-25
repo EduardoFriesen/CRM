@@ -1,5 +1,5 @@
 import { tool } from "ai";
-import { and, count, eq, gt, sql } from "drizzle-orm";
+import { and, count, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { recordAgentError } from "@/agent/config";
 import { searchCatalog } from "@/catalog/catalog";
@@ -53,7 +53,8 @@ export async function handOff(
         botPausedUntil: sql`now() + make_interval(hours => ${hours})`,
         reachedVentaAt: sql`coalesce(${contacts.reachedVentaAt}, now())`,
       })
-      .where(eq(contacts.id, contactId)),
+      // A chat waiting for a person (attention) is not a sale: it stays where it is.
+      .where(and(eq(contacts.id, contactId), isNull(contacts.attentionReason))),
   );
   try {
     await opts.notify?.(handoffText(await contactInfo(tenantId, contactId), reason));

@@ -76,6 +76,13 @@ export async function setContactStage(
       return fail("NEEDS_DELIVERED_ORDER", "Para pasar a Postventa el cliente necesita un pedido entregado");
     }
   }
+  if (parsed.data.stage === "consulta") {
+    // Consulta can drop off the board when idle: a pending order would be left behind.
+    const [pending] = await withTenant(tenantId, (tx) =>
+      tx.execute(sql`select 1 from orders where contact_id = ${parsed.data.contactId} and status = 'pending' limit 1`),
+    );
+    if (pending) return fail("HAS_PENDING_ORDER", "Entregá o cancelá el pedido antes de volver a Consulta");
+  }
   const [row] = await withTenant(tenantId, (tx) =>
     tx
       .update(contacts)
