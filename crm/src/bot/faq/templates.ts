@@ -11,6 +11,8 @@ export type TemplateKey =
   | "handoff"
   | "unclear"
   | "greeting"
+  | "quote"
+  | "quote_short"
   | "intro";
 
 // Customer-facing copy: rioplatense, short, WhatsApp style. Never stock quantities.
@@ -32,6 +34,15 @@ export const TEMPLATES: Record<TemplateKey, string[]> = {
   ],
   // Invite, don't apologize.
   unclear: ["Contame, ¿qué estás buscando?", "¿En qué te puedo ayudar?", "Decime, ¿qué necesitás?"],
+  quote: [
+    "Te paso el presupuesto:\n{lines}\nTotal: {total} (sin envío).\n¿Querés avanzar con el pedido?",
+    "Así quedaría:\n{lines}\nTotal: {total}, sin envío.\n¿Querés avanzar con el pedido?",
+  ],
+  // Never says how much is left.
+  quote_short: [
+    "No tenemos esa cantidad disponible ahora. Te paso con alguien del equipo para ver opciones.",
+    "Esa cantidad no la tenemos disponible en este momento; ya le aviso a alguien del equipo para que te escriba.",
+  ],
   greeting: ["¡Hola! ¿En qué te puedo ayudar?", "¡Buenas! Contame, ¿qué necesitás?", "¡Hola! ¿Qué estás buscando?"],
   intro: ["¡Hola! Soy el asistente de {tenant}. ¿En qué te puedo ayudar?", "¡Buenas! Te escribe el asistente de {tenant}. Contame, ¿qué necesitás?"],
 };

@@ -82,6 +82,28 @@ describe("answerTurn", () => {
     expect(i.runComplex).toHaveBeenCalledOnce();
   });
 
+  it("a quote over the stock hands off to a person", async () => {
+    const t = await makeTenant();
+    const r0 = await createProduct(t.id, { name: "Kikuyo", price: "10000", stock: "10" });
+    if (!r0.success) throw new Error("setup failed");
+    const i = input(customer("quiero 300 m2 de kikuyo"), routerFor("quote", { items: [{ product: "kikuyo", quantity: 300 }] }), { pick: () => 0 });
+    const r = await answerTurn(t.id, i);
+    expect(r).toMatchObject({ path: "handoff", fn: "quote", handoff: true });
+    expect(i.doHandoff).toHaveBeenCalledWith(expect.stringContaining("Kikuyo"));
+    expect(typeof r !== "string" && r.text).toBe(fill("quote_short", {}, () => 0));
+  });
+
+  it("a quote answers with the total and no handoff", async () => {
+    const t = await makeTenant();
+    const r0 = await createProduct(t.id, { name: "Kikuyo", price: "10000" });
+    if (!r0.success) throw new Error("setup failed");
+    const i = input(customer("cuanto serian 300 m2 de kikuyo"), routerFor("quote", { items: [{ product: "kikuyo", quantity: 300 }] }));
+    const r = await answerTurn(t.id, i);
+    expect(r).toMatchObject({ path: "faq", fn: "quote", handoff: false });
+    expect(typeof r !== "string" && r.text).toContain("$3.000.000");
+    expect(i.doHandoff).not.toHaveBeenCalled();
+  });
+
   it("handoff runs the handoff and answers with its template", async () => {
     const t = await makeTenant();
     const i = input(customer("quiero encargar dos docenas para el sabado"), routerFor("handoff", { reason: "Quiere encargar" }), { pick: () => 0 });

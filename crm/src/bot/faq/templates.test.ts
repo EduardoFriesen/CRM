@@ -36,6 +36,11 @@ describe("templates", () => {
     for (const v of TEMPLATES.handoff) expect(v).not.toMatch(/genial|perfecto|cerrar|avanzar/i);
   });
 
+  it("quote always says the price excludes shipping and never shows stock", () => {
+    for (const v of TEMPLATES.quote) expect(v).toMatch(/sin envío/);
+    for (const v of TEMPLATES.quote_short) expect(v).not.toContain("{");
+  });
+
   it("greeting says hello and asks what they need", () => {
     for (const v of TEMPLATES.greeting) expect(v).toMatch(/^¡(hola|buenas)/i);
   });

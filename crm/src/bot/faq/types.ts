@@ -8,9 +8,12 @@ export type FaqName =
   | "handoff"
   | "unclear"
   | "greeting"
-  | "catalog";
+  | "catalog"
+  | "quote";
 
-export type FaqArgs = { product?: string; zone?: string; reason?: string };
+export type QuoteItem = { product: string; quantity: number };
+
+export type FaqArgs = { product?: string; zone?: string; reason?: string; items?: QuoteItem[] };
 
 export type FaqCall = { fn: FaqName; args: FaqArgs };
 

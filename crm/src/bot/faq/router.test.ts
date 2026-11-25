@@ -32,7 +32,7 @@ describe("routeMessage", () => {
     expect(c.toolChoice?.type).toBe("required");
     expect(c.maxOutputTokens).toBe(200);
     expect(c.tools?.map((t) => t.name).sort()).toEqual(
-      ["catalog", "complex", "greeting", "handoff", "hours", "location", "payment_methods", "price", "shipping", "stock", "unclear"],
+      ["catalog", "complex", "greeting", "handoff", "hours", "location", "payment_methods", "price", "quote", "shipping", "stock", "unclear"],
     );
   });
 
@@ -43,6 +43,19 @@ describe("routeMessage", () => {
     expect(p.filter((m) => m.role !== "system")).toHaveLength(3);
     const sys = p.filter((m) => m.role === "system").map((m) => m.content).join("");
     expect(sys.length).toBeLessThan(1500);
+  });
+
+  it("a quote carries every product with its quantity", async () => {
+    const items = [{ product: "kikuyo", quantity: 300 }, { product: "tornillos 5mm", quantity: 12.5 }];
+    const model = new MockLanguageModelV4({ doGenerate: call("quote", { items }) });
+    expect((await routeMessage(model, turns(1))).call).toEqual({ fn: "quote", args: { items } });
+  });
+
+  it("a quote without items or with a non-positive quantity falls back to complex", async () => {
+    for (const items of [[], [{ product: "kikuyo", quantity: 0 }]]) {
+      const model = new MockLanguageModelV4({ doGenerate: call("quote", { items }) });
+      expect((await routeMessage(model, turns(1))).call.fn).toBe("complex");
+    }
   });
 
   it("invalid args fall back to complex", async () => {

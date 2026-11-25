@@ -1,7 +1,12 @@
 import { getBusinessProfile } from "@/business/profile";
-import { searchCatalog } from "@/catalog/catalog";
+import { matchProducts, searchCatalog } from "@/catalog/catalog";
+import { formatPrice } from "@/lib/money";
+import { plain } from "@/lib/plain";
 import { fill, type TemplateKey } from "./templates";
-import type { FaqCall } from "./types";
+import type { FaqCall, QuoteItem } from "./types";
+
+/** Customer text, or text plus the reason to hand the conversation to a person. */
+export type FaqAnswer = string | { text: string; handoff: string };
 
 const MAX_LISTED = 3;
 const MAX_CATALOG = 10;
@@ -14,7 +19,7 @@ const BUSINESS_FIELDS = {
 } as const satisfies Record<string, { field: string; key: string; template: TemplateKey }>;
 
 /** Final customer text for a classified question, from real data and templates only. `null` = no data to answer. */
-export async function answerFaq(tenantId: string, call: FaqCall, pick?: () => number): Promise<string | null> {
+export async function answerFaq(tenantId: string, call: FaqCall, pick?: () => number): Promise<FaqAnswer | null> {
   switch (call.fn) {
     case "unclear":
     case "greeting":
@@ -25,6 +30,8 @@ export async function answerFaq(tenantId: string, call: FaqCall, pick?: () => nu
       return answerProduct(tenantId, call, pick);
     case "catalog":
       return answerCatalog(tenantId, pick);
+    case "quote":
+      return answerQuote(tenantId, call.args.items ?? [], pick);
     default: {
       const { field, key, template } = BUSINESS_FIELDS[call.fn];
       const value = (await getBusinessProfile(tenantId))[field].trim();
@@ -47,6 +54,34 @@ async function answerCatalog(tenantId: string, pick?: () => number): Promise<str
   // One extra hit tells whether there are more than we list.
   const hits = await searchCatalog(tenantId, "", MAX_CATALOG + 1);
   return hits.length === 0 ? null : listing(hits, MAX_CATALOG, priceLine, pick);
+}
+
+const quantity = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
+
+// The exact name wins over partial matches ("tornillo" vs "tornillo 6mm"); otherwise only a single match.
+async function findProduct(tenantId: string, query: string) {
+  const hits = await matchProducts(tenantId, query);
+  const q = plain(query).trim();
+  return hits.find((h) => plain(h.name).trim() === q) ?? (hits.length === 1 ? hits[0] : null);
+}
+
+// Totals in cents so "3 × $50,50" is exactly $151,50.
+async function answerQuote(tenantId: string, items: QuoteItem[], pick?: () => number): Promise<FaqAnswer | null> {
+  if (items.length === 0) return null;
+  const lines: string[] = [];
+  let total = 0;
+  for (const item of items) {
+    const p = await findProduct(tenantId, item.product);
+    if (!p) return null;
+    const qty = quantity.format(item.quantity);
+    if (p.stock !== null && item.quantity > p.stock) {
+      return { text: fill("quote_short", {}, pick), handoff: `Pidió ${qty} de ${p.name} y no hay stock suficiente.` };
+    }
+    const cents = Math.round(Number(p.price) * 100 * item.quantity);
+    total += cents;
+    lines.push(`• ${p.name}: ${qty} × ${formatPrice(p.price)} = ${formatPrice(cents / 100)}`);
+  }
+  return fill("quote", { lines: lines.join("\n"), total: formatPrice(total / 100) }, pick);
 }
 
 async function answerProduct(tenantId: string, call: FaqCall, pick?: () => number): Promise<string | null> {

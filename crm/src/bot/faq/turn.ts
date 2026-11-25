@@ -92,10 +92,12 @@ export async function answerTurn(
     call = routed.call;
   }
 
-  const answer = await answerFaq(tenantId, call, input.pick);
-  if (answer === null) return complex(r);
-  if (call.fn === "handoff") {
-    await input.doHandoff(call.args.reason ?? "El cliente quiere avanzar con una compra");
+  const out = await answerFaq(tenantId, call, input.pick);
+  if (out === null) return complex(r);
+  const answer = typeof out === "string" ? out : out.text;
+  const reason = call.fn === "handoff" ? (call.args.reason ?? "El cliente quiere avanzar con una compra") : typeof out === "string" ? null : out.handoff;
+  if (reason !== null) {
+    await input.doHandoff(reason);
     r = { ...r, path: "handoff", handoff: true };
   }
   if (!input.introduce) return { ...r, text: answer };

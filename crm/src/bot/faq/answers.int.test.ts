@@ -129,6 +129,51 @@ describe("answerFaq", () => {
     expect(await answerFaq(t.id, { fn: "catalog", args: {} })).toBeNull();
   });
 
+  it("quote multiplies quantity by price, adds the lines and says shipping is not included", async () => {
+    const t = await makeTenant();
+    await add(t.id, "Kikuyo", "10000", "500");
+    await add(t.id, "Tornillos 5mm", "50.50");
+    const out = (await answerFaq(t.id, { fn: "quote", args: { items: [{ product: "kikuyo", quantity: 300 }, { product: "tornillos", quantity: 3 }] } })) as string;
+    const lines = out.split("\n");
+    expect(lines.find((l) => l.includes("Kikuyo"))).toContain("300 × $10.000 = $3.000.000");
+    expect(lines.find((l) => l.includes("Tornillos 5mm"))).toContain("3 × $50,50 = $151,50");
+    expect(out).toMatch(/Total: \$3\.000\.151,50/);
+    expect(out).toMatch(/sin envío/);
+    expect(out).not.toContain("500");
+  });
+
+  it("quote accepts decimal quantities", async () => {
+    const t = await makeTenant();
+    await add(t.id, "Kikuyo", "10000");
+    const out = (await answerFaq(t.id, { fn: "quote", args: { items: [{ product: "kikuyo", quantity: 12.5 }] } })) as string;
+    expect(out).toContain("12,5 × $10.000 = $125.000");
+  });
+
+  it("quote prefers the exact name and is null when a product is unknown or ambiguous", async () => {
+    const t = await makeTenant();
+    await add(t.id, "Tornillo", "50");
+    await add(t.id, "Tornillo 6mm", "60");
+    await add(t.id, "Clavo 1 pulgada", "10");
+    await add(t.id, "Clavo 2 pulgadas", "20");
+    expect(await answerFaq(t.id, { fn: "quote", args: { items: [{ product: "tornillo", quantity: 2 }] } })).toContain("$100");
+    expect(await answerFaq(t.id, { fn: "quote", args: { items: [{ product: "clavo", quantity: 2 }] } })).toBeNull();
+    expect(await answerFaq(t.id, { fn: "quote", args: { items: [{ product: "tornillo", quantity: 2 }, { product: "torta", quantity: 1 }] } })).toBeNull();
+    expect(await answerFaq(t.id, { fn: "quote", args: { items: [] } })).toBeNull();
+  });
+
+  it("quote over the stock hands off without revealing the quantity", async () => {
+    const t = await makeTenant();
+    await add(t.id, "Kikuyo", "10000", "120");
+    await add(t.id, "Gramilla", "8000", "0");
+    for (const product of ["kikuyo", "gramilla"]) {
+      const out = await answerFaq(t.id, { fn: "quote", args: { items: [{ product, quantity: 300 }] } }, () => 0);
+      expect(out).toMatchObject({ handoff: expect.stringContaining("300") });
+      const text = (out as { text: string }).text;
+      expect(text).toMatch(/no tenemos esa cantidad/i);
+      expect(text).not.toMatch(/120|\b0\b/);
+    }
+  });
+
   it("unclear, greeting and handoff always answer", async () => {
     const t = await makeTenant();
     for (const fn of ["unclear", "greeting", "handoff"] as const) {
