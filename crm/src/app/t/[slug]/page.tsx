@@ -13,7 +13,8 @@ import { CreateOrderButton, type OrderProduct } from "./order-form";
 import { OrdersSection } from "./orders-section";
 import { AutoRefresh } from "./auto-refresh";
 import { CloseContactButton } from "./close-contact-button";
-import { ReactivateButton } from "./reactivate-button";
+import { BotButton } from "./bot-button";
+import { StageButton } from "./stage-button";
 import { StageSelect } from "./stage-select";
 import { STAGE_LABELS } from "./stages";
 
@@ -131,6 +132,7 @@ function Card({
   const name = contact.name ?? (contact.phone ? `+${contact.phone}` : "Sin nombre");
   const href = waLink(contact.phone);
   const paused = !!contact.botPausedUntil && contact.botPausedUntil > now;
+  const quiet = paused || contact.botOff;
   const preview = contact.lastMessage === null ? null : messagePreview(contact.lastMessage);
   const body = (
     <>
@@ -156,8 +158,9 @@ function Card({
     </>
   );
 
+  const attention = contact.attentionReason;
   return (
-    <article className="card">
+    <article className={attention ? "card attention" : "card"}>
       {href ? (
         <a className="card-main" href={href} target="_blank" rel="noopener noreferrer">
           {body}
@@ -165,19 +168,37 @@ function Card({
       ) : (
         <div className="card-main">{body}</div>
       )}
-      {stage === "consulta" && <CloseContactButton slug={slug} contactId={contact.id} name={name} variant="dismiss" />}
-      {paused && (
+      {stage !== "postventa" && (
+        <CloseContactButton slug={slug} contactId={contact.id} name={name} variant="dismiss" confirm={stage === "venta"} />
+      )}
+      {attention && <p className="card-attention">Necesita atención: {attention}</p>}
+      {contact.botOff && !attention && <p className="card-paused">Bot apagado</p>}
+      {paused && !contact.botOff && (
         <p className="card-paused">
           Bot pausado hasta <time dateTime={contact.botPausedUntil!.toISOString()}>{pauseClock.format(contact.botPausedUntil!)}</time>
         </p>
       )}
       <div className="card-foot">
-        <StageSelect slug={slug} contactId={contact.id} stage={stage} name={name} canPostventa={contact.hasDeliveredOrder} />
+        {stage === "consulta" && <StageButton slug={slug} contactId={contact.id} name={name} to="venta" />}
         {stage === "venta" && (
-          <CreateOrderButton slug={slug} contactId={contact.id} contactName={name} products={products} today={today} />
+          <>
+            <StageButton slug={slug} contactId={contact.id} name={name} to="consulta" />
+            <CreateOrderButton slug={slug} contactId={contact.id} contactName={name} products={products} today={today} />
+          </>
         )}
-        {stage === "postventa" && <CloseContactButton slug={slug} contactId={contact.id} name={name} variant="sale" />}
-        {paused && <ReactivateButton slug={slug} contactId={contact.id} />}
+        {stage === "postventa" ? (
+          <>
+            <StageSelect slug={slug} contactId={contact.id} stage={stage} name={name} canPostventa={contact.hasDeliveredOrder} />
+            <CloseContactButton slug={slug} contactId={contact.id} name={name} variant="sale" />
+            {quiet ? (
+              <BotButton slug={slug} contactId={contact.id} name={name} off={false} label="Activar bot" />
+            ) : (
+              <BotButton slug={slug} contactId={contact.id} name={name} off label="Desactivar bot" />
+            )}
+          </>
+        ) : (
+          quiet && <BotButton slug={slug} contactId={contact.id} name={name} off={false} label="Reactivar bot" />
+        )}
       </div>
     </article>
   );

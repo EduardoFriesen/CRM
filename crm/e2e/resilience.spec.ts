@@ -31,14 +31,13 @@ test("the WhatsApp panel shows an error instead of freezing when the action fail
   await expect(page.getByRole("button", { name: "Reintentar" })).toBeVisible();
 });
 
-test("a failed stage change puts the select back and says so", async ({ page }) => {
+test("a failed stage change keeps the card and says so", async ({ page }) => {
   await page.goto(`/t/${slug}`);
   await page.waitForLoadState("networkidle");
   await failActions(page);
-  const select = page.getByLabel("Etapa de Clara");
-  await select.selectOption("venta");
+  await page.getByRole("button", { name: "Pasar a Venta: Clara" }).click();
   await expect(alert(page, "No pudimos cambiar la etapa")).toBeVisible();
-  await expect(select).toHaveValue("consulta");
+  await expect(page.getByRole("region", { name: /^Consulta/ }).getByText("Clara", { exact: true })).toBeVisible();
 });
 
 test("the tenant form keeps what was typed when validation fails", async ({ page }) => {

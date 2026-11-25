@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { closeContact, reactivateBot, setContactStage } from "@/contacts/contacts";
+import { z } from "zod";
+import { closeContact, setBotOff, setContactStage } from "@/contacts/contacts";
 import { cancelOrder, createOrder, deliverOrder, type OrderView } from "@/orders/orders";
 import type { Result } from "@/lib/result";
 import type { Stage } from "@/db/schema";
@@ -14,9 +15,11 @@ export async function changeStage(slug: string, contactId: string, stage: string
   return result;
 }
 
-export async function reactivateAction(slug: string, contactId: string): Promise<Result<{ id: string }>> {
+export async function setBotOffAction(slug: string, contactId: string, off: unknown): Promise<Result<{ id: string }>> {
   const tenant = await getCurrentTenant(slug);
-  const result = await reactivateBot(tenant.id, contactId);
+  const parsed = z.boolean().safeParse(off);
+  if (!parsed.success) return { success: false, error: { code: "VALIDATION", message: "Valor inválido" } };
+  const result = await setBotOff(tenant.id, contactId, parsed.data);
   if (result.success) revalidatePath(`/t/${tenant.slug}`);
   return result;
 }

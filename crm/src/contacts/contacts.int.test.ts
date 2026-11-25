@@ -145,11 +145,23 @@ describe("closeContact", () => {
     expect((await listBoard(t.id)).consulta).toEqual([]);
   });
 
-  it("refuses a venta contact with NOT_CLOSABLE", async () => {
+  it("closes a venta contact without a pending order", async () => {
     const t = await makeTenant();
     const c = await makeContact(t.id);
     await setStage(c.id, "venta");
-    expect(await closeContact(t.id, c.id)).toMatchObject({ success: false, error: { code: "NOT_CLOSABLE" } });
+    expect(await closeContact(t.id, c.id)).toMatchObject({ success: true });
+    expect(await closedAt(c.id)).not.toBeNull();
+  });
+
+  it("refuses a contact with a pending order", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await setStage(c.id, "venta");
+    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2099-12-01', 'X', 1)`;
+    expect(await closeContact(t.id, c.id)).toEqual({
+      success: false,
+      error: { code: "HAS_PENDING_ORDER", message: "Entregá o cancelá el pedido antes de cerrar" },
+    });
     expect(await closedAt(c.id)).toBeNull();
   });
 

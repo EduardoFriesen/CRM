@@ -5,22 +5,26 @@ import { closeContactAction } from "./actions";
 
 const FAILED = "No pudimos sacarlo del tablero, probá de nuevo.";
 
-// "Cerrar venta" (Postventa, in the card's foot) or "×" (Consulta, in the card's corner):
-// both take the contact off the board; it comes back if the customer writes again.
+// "Cerrar venta" (Postventa, in the card's foot) or "×" (Consulta and Venta, in the card's
+// corner): both take the contact off the board; it comes back if the customer writes again.
+// `confirm`: ask first (Venta, where a sale is in progress).
 export function CloseContactButton({
   slug,
   contactId,
   name,
   variant,
+  confirm = false,
 }: {
   slug: string;
   contactId: string;
   name: string;
   variant: "sale" | "dismiss";
+  confirm?: boolean;
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const onClick = () =>
+  const onClick = () => {
+    if (confirm && !window.confirm(`¿Quitar a ${name} del tablero? Vuelve si te escribe de nuevo.`)) return;
     start(async () => {
       setError(null);
       try {
@@ -30,6 +34,7 @@ export function CloseContactButton({
         setError(FAILED);
       }
     });
+  };
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant, type Tx } from "@/db/client";
 import { contacts, STAGES, type Stage } from "@/db/schema";
@@ -123,16 +123,24 @@ export async function closeContact(tenantId: string, id: string): Promise<Result
         and(
           eq(contacts.id, id),
           eq(contacts.tenantId, tenantId),
-          inArray(contacts.stage, ["consulta", "postventa"]),
           isNull(contacts.closedAt),
+          // A pending order would be left without its conversation.
+          sql`not exists (select 1 from orders o where o.contact_id = ${id} and o.status = 'pending')`,
         ),
       )
       .returning({ id: contacts.id });
     if (row) return ok(row);
-    const [exists] = await tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, id));
-    return exists
-      ? fail("NOT_CLOSABLE", "Solo se sacan del tablero clientes en Consulta o Postventa")
-      : fail("NOT_FOUND", "No encontramos ese cliente");
+    const [c] = await tx
+      .select({
+        closed: sql<boolean>`${contacts.closedAt} is not null`,
+        pending: sql<boolean>`exists (select 1 from orders o where o.contact_id = ${id} and o.status = 'pending')`,
+      })
+      .from(contacts)
+      .where(eq(contacts.id, id));
+    if (!c) return fail("NOT_FOUND", "No encontramos ese cliente");
+    return c.pending && !c.closed
+      ? fail("HAS_PENDING_ORDER", "Entregá o cancelá el pedido antes de cerrar")
+      : fail("NOT_CLOSABLE", "Ese cliente ya no está en el tablero");
   });
 }
 

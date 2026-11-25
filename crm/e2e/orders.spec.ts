@@ -29,7 +29,7 @@ test("only customers in venta can get an order, and postventa needs a delivered 
   await page.goto(`/t/${slug}`);
   await expect(card(page, "Ana").getByRole("button", { name: /Crear pedido/ })).toBeVisible();
   await expect(card(page, "Bruno").getByRole("button", { name: /Crear pedido/ })).toHaveCount(0);
-  await expect(page.getByLabel("Etapa de Ana").locator("option", { hasText: "Postventa (requiere pedido entregado)" })).toBeDisabled();
+  await expect(page.getByLabel("Etapa de Ana")).toHaveCount(0);
 });
 
 test("an order that exceeds the stock is refused and keeps what was typed", async ({ page }) => {
