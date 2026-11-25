@@ -654,6 +654,22 @@ describe("runConversation", () => {
       expect(e).toEqual({ path: "complex", outcome: "skipped:quota", router_model: "mock-model-id", router_input_tokens: 1 });
     });
 
+    it("a template handoff pauses the chat, moves it to venta and tells the admin", async () => {
+      const { t, c } = await setup({ discloseAi: false });
+      await say(t.id, c.id, "customer", "pasame el alias");
+      const model = new MockLanguageModelV4({ doGenerate: text("no debería usarse") });
+      const send = vi.fn(async (_i: string, jid: string) => ({ id: jid === ADMIN_JID ? `ADM-${Math.random()}` : "TPL-HANDOFF" }));
+      expect(await runConversation(t.id, c.id, { model, routerModel: null, send })).toBe("sent");
+      expect(model.doGenerateCalls).toHaveLength(0);
+      const [row] = await ownerSql<{ stage: string; bot_paused_until: Date }[]>`select stage, bot_paused_until from contacts where id = ${c.id}`;
+      expect(row.stage).toBe("venta");
+      expect(row.bot_paused_until.getTime()).toBeGreaterThan(Date.now());
+      expect(send).toHaveBeenCalledWith(t.slug, ADMIN_JID, expect.stringContaining("Traspaso: Ana"));
+      const [msg] = await ownerSql<{ handoff: boolean }[]>`select handoff from messages where wa_message_id = 'TPL-HANDOFF'`;
+      expect(msg.handoff).toBe(true);
+      expect(await events(t.id)).toMatchObject([{ path: "handoff", fn: "handoff", outcome: "sent" }]);
+    });
+
     it("stops on an exhausted quota in the router without calling the main model", async () => {
       const { t, c } = await setup();
       await say(t.id, c.id, "customer", "che cuanto sale el pan");
