@@ -96,6 +96,12 @@ describe("stage rules (entrega 4)", () => {
 });
 
 describe("learned facts and 2b rules", () => {
+  it("numbers learned facts so mark_faq can name one", () => {
+    const p = buildSystemPrompt({ ...base, facts: [{ question: "¿a?", answer: "ra" }, { question: "¿b?", answer: "rb" }] });
+    expect(p).toContain("- [1] P: ¿a? R: ra");
+    expect(p).toContain("- [2] P: ¿b? R: rb");
+  });
+
   it("puts learned facts inside the business block", () => {
     const p = buildSystemPrompt({ ...base, facts: [{ question: "¿Envían a Pilar?", answer: "Sí, los martes" }] });
     const open = p.indexOf("<negocio>");

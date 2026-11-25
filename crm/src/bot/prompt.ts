@@ -37,8 +37,9 @@ const asData = (s: string) => s.replace(/</g, "‹").replace(/>/g, "›");
 function factsSection(facts: { question: string; answer: string }[]): string[] {
   const lines: string[] = [];
   let size = 0;
-  for (const f of facts) {
-    const line = `- P: ${asData(f.question)} R: ${asData(f.answer)}`;
+  for (const [i, f] of facts.entries()) {
+    // Numbered so mark_faq can name the one that answered.
+    const line = `- [${i + 1}] P: ${asData(f.question)} R: ${asData(f.answer)}`;
     if (size + line.length + 1 > FACTS_MAX) break;
     lines.push(line);
     size += line.length + 1;

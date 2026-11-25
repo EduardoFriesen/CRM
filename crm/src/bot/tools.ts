@@ -6,6 +6,9 @@ import { searchCatalog } from "@/catalog/catalog";
 import { withTenant } from "@/db/client";
 import { contacts, escalations, type Stage } from "@/db/schema";
 import { escalationText, handoffText } from "./admin-messages";
+import { answerFaq } from "./faq/answers";
+import { LEARNABLE, saveExample } from "./faq/examples";
+import { allowedIn } from "./faq/scope";
 
 const MAX_PENDING_PER_CONTACT = 3;
 const FALLBACK = { ok: false, fallback: "no tengo ese dato, te lo confirma alguien del equipo" };
@@ -20,6 +23,10 @@ export type ToolOptions = {
   notify?: (text: string) => Promise<{ id: string }>;
   scheduleReminder?: (escalationId: string) => Promise<void>;
   pauseHours?: number;
+  /** For mark_faq: the customer's messages this turn answers, the stage and the numbered learned facts. */
+  customerText?: string;
+  stage?: Stage;
+  facts?: { id: string }[];
 };
 
 async function contactInfo(tenantId: string, contactId: string) {
@@ -138,6 +145,25 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
         );
         // A missing reminder must not undo a question the admin already received.
         await opts.scheduleReminder?.(esc.id).catch(() => recordAgentError(tenantId, "REMINDER_SCHEDULE"));
+        return { ok: true };
+      },
+    }),
+    mark_faq: tool({
+      description:
+        "Si el ÚLTIMO mensaje del cliente se respondía solo con horarios, dirección, medios de pago, envíos, un saludo, una despedida, el catálogo, el estado de su pedido o una respuesta aprendida (fact = su número), llamala además de responder. Si hacía falta algo más, no la llames.",
+      inputSchema: z.object({ fn: z.enum(LEARNABLE), fact: z.number().int().min(1).optional() }),
+      // Saves a shortcut only when that cheap function really answers this customer now. Never
+      // fails the reply: the model always gets ok.
+      execute: async ({ fn, fact }) => {
+        if (opts.dryRun || !opts.customerText || !opts.stage || !allowedIn(opts.stage, fn)) return { ok: true };
+        try {
+          const factId = fn === "learned" ? opts.facts?.[(fact ?? 0) - 1]?.id : undefined;
+          if (fn === "learned" && !factId) return { ok: true };
+          const answer = await answerFaq(tenantId, { fn, args: factId ? { factId } : {} }, undefined, contactId);
+          if (answer !== null) await saveExample(tenantId, { text: opts.customerText, fn, factId });
+        } catch (e) {
+          console.error(`mark_faq failed: ${String((e as { code?: unknown } | null)?.code ?? (e as Error | null)?.name ?? "unknown")}`);
+        }
         return { ok: true };
       },
     }),

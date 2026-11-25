@@ -15,6 +15,7 @@ import { buildSystemPrompt } from "./prompt";
 import { enqueueReminder } from "./queue";
 import { asksForSensitiveData } from "./sensitive-guard";
 import { handOff, makeTools } from "./tools";
+import { customerBlock } from "./faq/scope";
 import { answerTurn, emptyTurn, turnEvent, type TurnResult } from "./faq/turn";
 import { recordBotEvent } from "@/usage/events";
 
@@ -243,6 +244,7 @@ export async function runConversation(
   const notify = (t: string) => notifyAdmin(tenantId, t, { send });
 
   const runComplex = async () => {
+    const facts = await recentFacts(tenantId);
     const system = buildSystemPrompt({
       ...rt,
       business: await getBusinessProfile(tenantId),
@@ -250,7 +252,7 @@ export async function runConversation(
       tenantName: conv.tenantName,
       introduce,
       now,
-      facts: await recentFacts(tenantId),
+      facts,
       stage,
     });
     return generateOrRecord(tenantId, rt, deps.model, {
@@ -262,6 +264,9 @@ export async function runConversation(
         scheduleReminder: deps.scheduleReminder ?? ((id) => enqueueReminder(tenantId, id)),
         pauseHours: rt.pauseHours,
         onHandoff: () => (handedOff = true),
+        customerText: customerBlock(conv.recent.map(toTurn)),
+        stage,
+        facts,
       }),
     });
   };

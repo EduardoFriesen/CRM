@@ -6,6 +6,7 @@ import type { BotEvent, BotPath } from "@/usage/events";
 import { answerFaq, type FaqAnswer } from "./answers";
 import { findExample, recentExamples } from "./examples";
 import { prefilter } from "./prefilter";
+import { allowedIn, customerBlock } from "./scope";
 import { recentFacts } from "@/facts/facts";
 import { ROUTER_FACTS, routeMessage, type RouterContext } from "./router";
 import { fill } from "./templates";
@@ -54,21 +55,6 @@ export function turnEvent(contactId: string, outcome: string, r: TurnResult, mod
  * Produces the text for one customer turn: silence, a template answer (pre-filter rule or
  * router), or the full bot (`runComplex`). Consulta and Postventa use the cheap paths.
  */
-// Postventa: what a customer who already bought may ask. Product questions go to the full bot,
-// which can move them back to Consulta.
-const POSTVENTA_FNS = new Set(["order_status", "hours", "location", "payment_methods", "shipping", "greeting", "farewell", "learned", "handoff", "unclear"]);
-
-export function allowedIn(stage: Stage, fn: string): boolean {
-  if (stage === "venta") return false;
-  return stage === "postventa" ? POSTVENTA_FNS.has(fn) : fn !== "order_status";
-}
-
-/** The customer's messages after the last bot or admin turn, one per line. */
-export function customerBlock(turns: HistoryTurn[]): string {
-  const lastOther = turns.findLastIndex((t) => t.role !== "user");
-  return turns.slice(lastOther + 1).map((t) => t.text).join("\n");
-}
-
 export async function answerTurn(
   tenantId: string,
   input: {
