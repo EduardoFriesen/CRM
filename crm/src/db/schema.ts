@@ -263,3 +263,20 @@ export const botEvents = pgTable(
   },
   (t) => [index("bot_events_tenant_created_idx").on(t.tenantId, t.createdAt)],
 );
+
+// Shortcuts the main model marked as answerable by a cheap function: an identical message is
+// answered without a model, and recent ones guide the router. Never linked to a contact.
+export const routerExamples = pgTable(
+  "router_examples",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tenantId: tenantId(),
+    key: text().notNull(),
+    text: text().notNull(),
+    fn: text().notNull(),
+    factId: uuid("fact_id").references(() => businessFacts.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("router_examples_tenant_key_unique").on(t.tenantId, t.key)],
+);
+export type RouterExampleRow = typeof routerExamples.$inferSelect;
