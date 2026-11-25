@@ -13,6 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node migrate.mjs",
     "build:worker": "esbuild src/worker.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=dist/worker.mjs",
+    "metrics": "esbuild scripts/metrics.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/metrics.mjs --log-level=warning && node dist/metrics.mjs",
     "eval:agent": "vitest run --config vitest.eval.config.ts"
   },
   "dependencies": {
