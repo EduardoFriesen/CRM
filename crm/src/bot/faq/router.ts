@@ -2,12 +2,19 @@ import { generateText, InvalidToolInputError, NoSuchToolError, ToolChoiceViolati
 import { z } from "zod";
 import { toModelMessages, type HistoryTurn } from "@/bot/history";
 import type { TurnUsage } from "@/bot/reply";
+import type { RouterExample } from "./examples";
 import type { FaqCall } from "./types";
 
 export type RouterCall = FaqCall | { fn: "complex"; args: Record<string, never> };
 
 export const ROUTER_TURNS = 3;
 export const ROUTER_FACTS = 30;
+export const ROUTER_EXAMPLES = 20;
+
+export type RouterContext = {
+  facts?: { id?: string; question: string }[];
+  examples?: Pick<RouterExample, "text" | "fn" | "factId">[];
+};
 const CLIP = 120;
 const clip = (s: string) => (s.length > CLIP ? `${s.slice(0, CLIP)}…` : s);
 
@@ -81,6 +88,16 @@ const COMPLEX: RouterCall = { fn: "complex", args: {} };
 const LEARNED = z.object({ n: z.number().int().min(1) });
 const LEARNED_TOOL = tool({ description: "The customer asks the same as one of the questions the business already answered.", inputSchema: LEARNED });
 
+// A learned shortcut is shown by its fact's number; one whose fact is not in the list is left out.
+function examplesSection(examples: RouterContext["examples"] = [], facts: { id?: string }[]): string {
+  const lines = examples.slice(0, ROUTER_EXAMPLES).flatMap((e) => {
+    if (e.fn !== "learned") return [`"${clip(e.text)}" → ${e.fn}`];
+    const n = facts.findIndex((f) => f.id !== undefined && f.id === e.factId) + 1;
+    return n > 0 ? [`"${clip(e.text)}" → learned ${n}`] : [];
+  });
+  return lines.length ? `\nEjemplos de este negocio:\n${lines.join("\n")}` : "";
+}
+
 function learnedSection(facts: { question: string }[]): string {
   if (facts.length === 0) return "";
   const list = facts.map((f, i) => `${i + 1}. ${clip(f.question)}`).join("\n");
@@ -90,7 +107,7 @@ function learnedSection(facts: { question: string }[]): string {
 export async function routeMessage(
   model: LanguageModel,
   turns: HistoryTurn[],
-  ctx: { facts?: { question: string }[] } = {},
+  ctx: RouterContext = {},
 ): Promise<{ call: RouterCall; usage: TurnUsage }> {
   const facts = (ctx.facts ?? []).slice(0, ROUTER_FACTS);
   // The SDK throws on malformed output and drops the usage with it; read it off the raw provider result.
@@ -111,7 +128,7 @@ export async function routeMessage(
   try {
     const r = await generateText({
       model: metered,
-      instructions: INSTRUCTIONS + learnedSection(facts),
+      instructions: INSTRUCTIONS + learnedSection(facts) + examplesSection(ctx.examples, facts),
       messages: toModelMessages(turns.slice(-ROUTER_TURNS), { toolCalls: false }),
       tools: facts.length ? { ...TOOLS, learned: LEARNED_TOOL } : TOOLS,
       toolChoice: "required",

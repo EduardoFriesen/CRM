@@ -84,6 +84,21 @@ describe("routeMessage", () => {
     expect(sysOf(m)).not.toContain("31. pregunta 31");
   });
 
+  it("lists the tenant's shortcuts as guidance, learned ones by their fact number", async () => {
+    const m = new MockLanguageModelV4({ doGenerate: call("hours", {}) });
+    await routeMessage(m, turns(1), {
+      facts: [{ id: "f1", question: "¿Hacen factura A?" }],
+      examples: [
+        { text: "a que hora cierran", fn: "hours", factId: null },
+        { text: "emiten factura a", fn: "learned", factId: "f1" },
+        { text: "y el estacionamiento", fn: "learned", factId: "gone" },
+      ],
+    });
+    expect(sysOf(m)).toContain('"a que hora cierran" → hours');
+    expect(sysOf(m)).toContain('"emiten factura a" → learned 1');
+    expect(sysOf(m)).not.toContain("y el estacionamiento");
+  });
+
   it("invalid args fall back to complex", async () => {
     const model = new MockLanguageModelV4({ doGenerate: call("price", { product: "" }) });
     expect((await routeMessage(model, turns(1))).call).toEqual({ fn: "complex", args: {} });

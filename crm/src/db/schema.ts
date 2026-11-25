@@ -237,7 +237,7 @@ export const aiUsage = pgTable(
 );
 
 // Which path answered each customer turn. Metrics only: never the message text.
-export const BOT_PATHS = ["silence", "prefilter", "faq", "complex", "handoff", "relay"] as const;
+export const BOT_PATHS = ["silence", "prefilter", "faq", "complex", "handoff", "relay", "example"] as const;
 export const botPath = pgEnum("bot_path", BOT_PATHS);
 
 export const botEvents = pgTable(

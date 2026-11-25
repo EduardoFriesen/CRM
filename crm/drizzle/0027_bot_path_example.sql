@@ -1,0 +1,1 @@
+ALTER TYPE "public"."bot_path" ADD VALUE 'example';

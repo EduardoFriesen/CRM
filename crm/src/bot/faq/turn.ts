@@ -3,10 +3,11 @@ import type { Stage } from "@/db/schema";
 import type { HistoryTurn } from "@/bot/history";
 import { classifyModelError, meter, type SkipOutcome, type TurnUsage } from "@/bot/reply";
 import type { BotEvent, BotPath } from "@/usage/events";
-import { answerFaq } from "./answers";
+import { answerFaq, type FaqAnswer } from "./answers";
+import { findExample, recentExamples } from "./examples";
 import { prefilter } from "./prefilter";
 import { recentFacts } from "@/facts/facts";
-import { ROUTER_FACTS, routeMessage } from "./router";
+import { ROUTER_FACTS, routeMessage, type RouterContext } from "./router";
 import { fill } from "./templates";
 import type { FaqCall } from "./types";
 
@@ -96,13 +97,23 @@ export async function answerTurn(
 
   let call: FaqCall;
   let r: TurnResult;
+  let out: FaqAnswer | null | undefined;
+  // A shortcut the main model marked before: same words, same function, no model at all.
+  const shortcut = decision ? null : await findExample(tenantId, customerBlock(input.turns));
+  const shortcutCall: FaqCall | null =
+    shortcut && allowedIn(input.stage, shortcut.fn) ? { fn: shortcut.fn, args: shortcut.factId ? { factId: shortcut.factId } : {} } : null;
+  const shortcutOut = shortcutCall ? await answerFaq(tenantId, shortcutCall, input.pick, input.contactId) : null;
   if (decision) {
     call = decision;
     r = { ...base, path: "prefilter", fn: decision.fn };
+  } else if (shortcutCall && shortcutOut !== null) {
+    call = shortcutCall;
+    r = { ...base, path: "example", fn: shortcutCall.fn };
+    out = shortcutOut;
   } else {
     if (!input.routerModel) return complex(base);
     const facts = (await recentFacts(tenantId)).slice(0, ROUTER_FACTS);
-    const routed = await route(tenantId, input.routerModel, input.turns, facts);
+    const routed = await route(tenantId, input.routerModel, input.turns, { facts, examples: await recentExamples(tenantId) });
     const routerModel = modelName(input.routerModel);
     if (typeof routed === "string") return { ...base, path: "faq", routerModel, skip: routed };
     r = { ...base, path: "faq", fn: routed.call.fn, routerModel, routerUsage: routed.usage };
@@ -111,7 +122,7 @@ export async function answerTurn(
     call = routed.call.fn === "learned" ? { fn: "learned", args: { factId: facts[(routed.call.args.n ?? 0) - 1]?.id } } : routed.call;
   }
 
-  const out = await answerFaq(tenantId, call, input.pick, input.contactId);
+  if (out === undefined) out = await answerFaq(tenantId, call, input.pick, input.contactId);
   if (out === null) return complex(r);
   const answer = typeof out === "string" ? out : out.text;
   const reason = call.fn === "handoff" ? (call.args.reason ?? "El cliente quiere avanzar con una compra") : typeof out === "string" ? null : out.handoff;
@@ -129,9 +140,9 @@ export async function answerTurn(
 // The router call is metered and its errors classified like the main model's, except that a
 // permanent error (unknown model, no tool support…) is recorded and routes to the full bot:
 // a misconfigured router model must not silence the bot.
-async function route(tenantId: string, model: LanguageModel, turns: HistoryTurn[], facts: { question: string }[]) {
+async function route(tenantId: string, model: LanguageModel, turns: HistoryTurn[], ctx: RouterContext) {
   try {
-    const routed = await routeMessage(model, turns, { facts });
+    const routed = await routeMessage(model, turns, ctx);
     await meter(tenantId, { requests: 1, inputTokens: routed.usage.inputTokens, outputTokens: routed.usage.outputTokens });
     return routed;
   } catch (e) {

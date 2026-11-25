@@ -21,6 +21,9 @@ describe("describeAnswerer", () => {
   it("credits the router for a handoff it decided", () => {
     expect(describeAnswerer(e("handoff", "haiku", null))).toBe("Router (haiku)");
   });
+  it("calls a shortcut answer a shortcut", () => {
+    expect(describeAnswerer(e("example", null, null))).toBe("Atajo (sin IA)");
+  });
   it("shows a dash when there is no answer yet", () => {
     expect(describeAnswerer(null)).toBe("—");
   });

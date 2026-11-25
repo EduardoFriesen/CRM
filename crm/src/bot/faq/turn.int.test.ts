@@ -4,6 +4,7 @@ import { saveBusinessProfile } from "@/business/profile";
 import { createProduct } from "@/catalog/catalog";
 import type { HistoryTurn } from "@/bot/history";
 import { dropTenants, makeContact, makeTenant, ownerSql } from "@/test/db";
+import { saveExample } from "./examples";
 import { fill } from "./templates";
 import { answerTurn } from "./turn";
 
@@ -162,6 +163,42 @@ describe("answerTurn", () => {
       (${t.id}, 'vieja', 'respuesta vieja', '2026-10-01'), (${t.id}, 'nueva', 'respuesta nueva', '2026-11-01')`;
     const r = await answerTurn(t.id, input(customer("eso de la nueva?"), routerFor("learned", { n: 1 })));
     expect(r).toMatchObject({ path: "faq", fn: "learned", text: "respuesta nueva" });
+  });
+
+  it("an exact shortcut answers without the router", async () => {
+    const t = await makeTenant();
+    await saveBusinessProfile(t.id, { hours: "de 8 a 20" });
+    await saveExample(t.id, { text: "che cuando estan abiertos", fn: "hours" });
+    const router = routerFor("complex", {});
+    const r = await answerTurn(t.id, input(customer("Che, ¿cuándo están abiertos?"), router, { pick: () => 0 }));
+    expect(r).toMatchObject({ path: "example", fn: "hours", text: fill("hours", { hours: "de 8 a 20" }, () => 0) });
+    expect(router.doGenerateCalls).toHaveLength(0);
+  });
+
+  it("a shortcut whose function has no data falls through to the router", async () => {
+    const t = await makeTenant();
+    await saveExample(t.id, { text: "che cuando estan abiertos", fn: "hours" });
+    const router = routerFor("complex", {});
+    expect(await answerTurn(t.id, input(customer("che cuando estan abiertos"), router))).toMatchObject({ path: "complex" });
+    expect(router.doGenerateCalls).toHaveLength(1);
+  });
+
+  it("a shortcut not allowed in the stage falls through to the router", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2026-11-28', 'X', 100)`;
+    await saveExample(t.id, { text: "y lo mio para cuando", fn: "order_status" });
+    const router = routerFor("complex", {});
+    await answerTurn(t.id, input(customer("y lo mio para cuando"), router, { contactId: c.id }));
+    expect(router.doGenerateCalls).toHaveLength(1);
+  });
+
+  it("a learned shortcut answers its fact", async () => {
+    const t = await makeTenant();
+    const [f] = await ownerSql<{ id: string }[]>`insert into business_facts (tenant_id, question, answer) values (${t.id}, '¿Hacen factura A?', 'Sí, factura A.') returning id`;
+    await saveExample(t.id, { text: "emiten factura a", fn: "learned", factId: f.id });
+    const r = await answerTurn(t.id, input(customer("emiten factura A?"), routerFor("complex", {})));
+    expect(r).toMatchObject({ path: "example", fn: "learned", text: "Sí, factura A." });
   });
 
   it("introduces itself on a template answer", async () => {
