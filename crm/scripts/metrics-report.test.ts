@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarize, type EventRow } from "./metrics-report";
+import { parseCliArgs, summarize, type EventRow } from "./metrics-report";
 
 const row = (o: Partial<EventRow>): EventRow => ({
   path: "complex",
@@ -54,5 +54,21 @@ describe("summarize", () => {
     const rep = summarize([], prices);
     expect(rep.total).toBe(0);
     expect(rep.byPath.faq).toMatchObject({ share: 0, avgInput: 0, costUsd: 0 });
+  });
+});
+
+describe("parseCliArgs", () => {
+  it("defaults to 7 days", () => {
+    expect(parseCliArgs([])).toEqual({ days: 7, tenant: undefined });
+  });
+  it("parses days and tenant", () => {
+    expect(parseCliArgs(["--days", "3", "--tenant", "acme"])).toEqual({ days: 3, tenant: "acme" });
+  });
+  it.each([["0.5"], ["0"], ["-1"], ["abc"]])("rejects --days %s", (d) => {
+    expect(() => parseCliArgs(["--days", d])).toThrow();
+  });
+  it("rejects unknown flags and a missing value", () => {
+    expect(() => parseCliArgs(["--foo"])).toThrow();
+    expect(() => parseCliArgs(["--tenant"])).toThrow();
   });
 });

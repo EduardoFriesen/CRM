@@ -1,3 +1,4 @@
+import { parseArgs } from "node:util";
 import { BOT_PATHS } from "../src/db/schema";
 import type { BotPath } from "../src/usage/events";
 
@@ -57,4 +58,15 @@ export function summarize(rows: EventRow[], prices: Prices): Report {
   ) as Record<BotPath, PathStats>;
 
   return { total, byPath, unknownModels: [...unknown].sort() };
+}
+
+/** Parses `--days <int>` (default 7) and `--tenant <slug>`; throws a readable Error on bad input. */
+export function parseCliArgs(argv: string[]): { days: number; tenant: string | undefined } {
+  const { values } = parseArgs({
+    args: argv,
+    options: { tenant: { type: "string" }, days: { type: "string", default: "7" } },
+  });
+  const days = Number(values.days);
+  if (!Number.isInteger(days) || days <= 0) throw new Error("--days must be a positive integer");
+  return { days, tenant: values.tenant };
 }

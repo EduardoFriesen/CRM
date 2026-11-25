@@ -1,9 +1,17 @@
 // Operator-only: aggregates bot_events into % of turns, avg tokens and estimated cost per path.
 // Usage: npm run metrics -- [--tenant <slug>] [--days 7]
 import { readFileSync } from "node:fs";
-import { parseArgs } from "node:util";
 import postgres from "postgres";
-import { summarize, type EventRow, type Prices } from "./metrics-report";
+import { parseCliArgs, summarize, type EventRow, type Prices } from "./metrics-report";
+
+let args: ReturnType<typeof parseCliArgs>;
+try {
+  args = parseCliArgs(process.argv.slice(2));
+} catch (e) {
+  console.error(`${(e as Error).message}\nUsage: npm run metrics -- [--tenant <slug>] [--days <n>]`);
+  process.exit(1);
+}
+const { days, tenant } = args;
 
 const url = process.env.DATABASE_OWNER_URL;
 if (!url) {
@@ -11,13 +19,7 @@ if (!url) {
   process.exit(1);
 }
 
-const { values } = parseArgs({ options: { tenant: { type: "string" }, days: { type: "string", default: "7" } } });
-const days = Number(values.days);
-if (!Number.isFinite(days) || days <= 0) {
-  console.error("--days must be a positive number");
-  process.exit(1);
-}
-
+// Resolved from dist/metrics.mjs (the bundle), so it points at <repo>/scripts/prices.json.
 const prices: Prices = JSON.parse(readFileSync(new URL("../scripts/prices.json", import.meta.url), "utf8"));
 
 const sql = postgres(url, { max: 1 });
@@ -28,10 +30,10 @@ try {
     from bot_events e
     join tenants t on t.id = e.tenant_id
     where e.created_at >= now() - make_interval(days => ${days})
-      ${values.tenant ? sql`and t.slug = ${values.tenant}` : sql``}`;
+      ${tenant ? sql`and t.slug = ${tenant}` : sql``}`;
 
   const report = summarize(rows, prices);
-  console.log(`Turns: ${report.total} (last ${days} days${values.tenant ? `, tenant ${values.tenant}` : ""})`);
+  console.log(`Turns: ${report.total} (last ${days} days${tenant ? `, tenant ${tenant}` : ""})`);
   console.table(
     Object.fromEntries(
       Object.entries(report.byPath).map(([p, s]) => [
