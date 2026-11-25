@@ -19,8 +19,9 @@ export function TestChat({ slug, configured }: { slug: string; configured: boole
     const text = draft.trim();
     if (!text || pending) return;
     // Keep the last 19 turns so the request stays within the 20-message limit.
-    const history = [...turns, { role: "user" as const, text }].slice(-20);
-    setTurns(history);
+    // Silent turns (empty text) are shown but never sent back: the server rejects empty messages.
+    const history = [...turns, { role: "user" as const, text }].filter((t) => t.text).slice(-20);
+    setTurns([...turns, { role: "user" as const, text }].slice(-20));
     setDraft("");
     setError(null);
     start(async () => {
@@ -29,7 +30,7 @@ export function TestChat({ slug, configured }: { slug: string; configured: boole
         const r = await tryAgentAction(slug, history.map(({ role, text: t, handoff }) => ({ role, text: t, handoff })));
         if (r.success) {
           const { reply, stage, adminNote, handoff } = r.data;
-          setTurns([...history, { role: "assistant" as const, text: reply, stage, adminNote, handoff }].slice(-19));
+          setTurns([...turns, { role: "user" as const, text }, { role: "assistant" as const, text: reply, stage, adminNote, handoff }].slice(-20));
         }
         else setError(r.error.message);
       } catch {
@@ -52,8 +53,8 @@ export function TestChat({ slug, configured }: { slug: string; configured: boole
       <ol className="chat-log" aria-live="polite">
         {turns.length === 0 && <li className="chat-empty">Probá cómo responde tu agente. Escribí como lo haría un cliente.</li>}
         {turns.map((t, i) => (
-          <li key={i} className={`bubble ${t.role}`}>
-            <span className="visually-hidden">{t.role === "user" ? "Vos: " : "Agente: "}</span>
+          <li key={i} className={t.text ? `bubble ${t.role}` : "stage-note"}>
+            {t.text && <span className="visually-hidden">{t.role === "user" ? "Vos: " : "Agente: "}</span>}
             {t.text}
             {t.stage && <span className="stage-note">(el bot movería la tarjeta a {STAGE_LABELS[t.stage]})</span>}
             {t.adminNote && <span className="stage-note">{t.adminNote}</span>}

@@ -41,6 +41,17 @@ test("the test chat answers with the configured agent", async ({ page }) => {
   await expect(page.getByText("Respuesta de prueba")).toBeVisible();
 });
 
+test("the test chat keeps working after a silent turn", async ({ page }) => {
+  await page.goto(`/t/${slug}/configuracion/agente`);
+  await page.getByLabel("Mensaje de prueba").fill("gracias");
+  await page.getByRole("button", { name: "Enviar" }).click();
+  await expect(page.getByText("(el bot no respondería: mensaje trivial)")).toBeVisible();
+  await page.getByLabel("Mensaje de prueba").fill("Hola");
+  await page.getByRole("button", { name: "Enviar" }).click();
+  await expect(page.getByText("Respuesta de prueba")).toBeVisible();
+  await expect(page.locator(".form-error")).toHaveCount(0);
+});
+
 test("the admin's WhatsApp and the pause length are editable", async ({ page }) => {
   await page.goto(`/t/${slug}/configuracion/agente`);
   await expect(page.getByLabel("Horas de pausa tras un traspaso")).toHaveValue("12");

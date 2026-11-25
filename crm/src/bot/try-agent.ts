@@ -17,6 +17,8 @@ import { errorCode, generateAgentText, SAFE_HANDOFF_TEXT, truncateForWhatsApp } 
 import { asksForSensitiveData } from "./sensitive-guard";
 import { makeTools } from "./tools";
 
+const HANDOFF_NOTE = "(el bot pasaría la charla a alguien del equipo)";
+
 const historyInput = z
   .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().trim().min(1).max(1000), handoff: z.boolean().optional() }))
   .min(1)
@@ -43,7 +45,6 @@ export async function tryAgent(
   let handoff = false;
   const facts = await recentFacts(tenantId);
   const system = buildSystemPrompt({ ...rt, business: await getBusinessProfile(tenantId), cache: rt.provider === "anthropic", tenantName: tenant?.name ?? "", introduce: rt.discloseAi && parsed.data.length === 1, now: new Date(), facts });
-  const HANDOFF_NOTE = "(el bot pasaría la charla a alguien del equipo)";
   try {
     const model = deps.model ?? (await createModel(rt));
     const routerModel =
@@ -86,6 +87,8 @@ export async function tryAgent(
     if (turn.fn && turn.path !== "complex") adminNote ??= `(respondió con plantilla: ${turn.fn})`;
     return ok({ path: turn.path, reply: truncateForWhatsApp(reply.trim()), stage, adminNote, handoff });
   } catch (e) {
+    // Router errors are classified inside answerTurn (as on WhatsApp): an auth error here also
+    // records the agent error and marks the key invalid. Accepted: it is the same, really invalid, key.
     if (isAuthError(e)) return fail("KEY_INVALID", "El proveedor rechazó la API key");
     if (isQuotaExhausted(e)) return fail("QUOTA_EXCEEDED", describeAgentError("QUOTA_EXCEEDED"));
     if (errorCode(e) === "OLLAMA_UNAVAILABLE") return fail("MODEL_ERROR", describeAgentError("OLLAMA_UNAVAILABLE"));

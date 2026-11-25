@@ -173,7 +173,6 @@ describe("tryAgent", () => {
 
   it("keeps a template handoff as a dry run", async () => {
     const t = await cfg();
-    await makeContact(t.id, { name: "Ana" });
     const r = await tryAgent(t.id, [{ role: "user", text: "pasame el alias" }], { model: failing() });
     expect(r).toMatchObject({ success: true, data: { path: "handoff", handoff: true, adminNote: "(el bot pasaría la charla a alguien del equipo)" } });
     expect(await ownerSql`select 1 from escalations where tenant_id = ${t.id}`).toHaveLength(0);
@@ -199,5 +198,35 @@ describe("tryAgent", () => {
       doGenerate: { content: [{ type: "text", text: "Hola" }], finishReason: { unified: "stop", raw: undefined }, usage, warnings: [] },
     });
     expect(await tryAgent(t.id, [{ role: "user", text: "Contame de las tortas" }], { model })).toMatchObject({ success: true, data: { path: "complex" } });
+  });
+
+
+  it("answers a faq through an injected router model", async () => {
+    const t = await cfg();
+    const r = await tryAgent(t.id, [{ role: "user", text: "Contame de las tortas" }], {
+      model: failing(),
+      routerModel: new MockLanguageModelV4({
+        doGenerate: {
+          content: [{ type: "tool-call", toolCallId: "r1", toolName: "hours", input: "{}" }],
+          finishReason: { unified: "tool-calls", raw: undefined },
+          usage,
+          warnings: [],
+        },
+      }),
+    });
+    expect(r).toMatchObject({ success: true, data: { path: "faq", adminNote: "(respondió con plantilla: hours)" } });
+  });
+
+  it("reports an invalid key when the router rejects it", async () => {
+    const t = await cfg();
+    const routerModel = new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new APICallError({ message: "bad key", url: "https://x", requestBodyValues: {}, statusCode: 401, responseBody: "" });
+      },
+    });
+    expect(await tryAgent(t.id, [{ role: "user", text: "Contame de las tortas" }], { model: failing(), routerModel })).toMatchObject({
+      success: false,
+      error: { code: "KEY_INVALID" },
+    });
   });
 });
