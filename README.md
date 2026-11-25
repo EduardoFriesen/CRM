@@ -86,6 +86,20 @@ Para probar el bot sin cuotas ni proveedores pagos, el compose de desarrollo ofr
 
 Los modelos locales chicos siguen peor las reglas que los grandes: usalos para desarrollar, no como referencia de calidad.
 
+## Bot: respuestas frecuentes y métricas
+
+Antes de llamar al modelo principal, cada mensaje pasa por dos filtros baratos (`crm/src/bot/faq/`): un prefiltro por reglas (cero tokens: silencia "ok", "gracias", 👍 y mapea preguntas obvias como horarios o dirección) y, si no alcanza, un router con el "Modelo rápido" (Configuración › Agente) que elige una función. Si la función es una pregunta frecuente, la respuesta sale de una plantilla con los datos del negocio (Configuración › Negocio) sin pasar por el modelo principal. Lo que el router no resuelve ("complex") sigue el camino de siempre.
+
+**Agregar una pregunta frecuente** (todo en `crm/src/bot/faq/`):
+1. La función que arma los datos en `answers.ts`.
+2. La plantilla de texto en `templates.ts`.
+3. La herramienta (schema + descripción) en `router.ts`, y el nombre en `FaqName` de `types.ts`.
+4. Opcional: una regla regex en `rules.ts` para resolverla sin gastar tokens.
+
+**Medir el router**: `cd crm && EVAL_MODEL=qwen3:8b npm run eval:router` (necesita Ollama local). Corre 30 mensajes realistas (con typos y abreviaturas) por prefiltro + router e imprime la precisión total, por función y los errores; falla debajo de 80%. No es parte de la suite.
+
+**Métricas**: `cd crm && npm run metrics -- [--tenant <slug>] [--days 7]` informa, por camino (silencio, regla, router, modelo principal), cuántos mensajes y tokens consumió y su costo. Los precios están en `crm/scripts/prices.json` (viene vacío, `{}`), con el formato `{ "<id del modelo>": { "input": <USD/1M>, "output": <USD/1M>, "cached": <USD/1M> } }`. Los modelos sin precio se listan aparte y quedan fuera del costo.
+
 ## Pedidos
 
 - Se crean desde la tarjeta de un cliente en **Venta** (botón **Crear pedido**): productos del catálogo con cantidad, fecha de entrega y datos de envío. El total sale de los precios del catálogo, que quedan congelados en el pedido.
