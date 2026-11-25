@@ -106,6 +106,9 @@ export async function answerTurn(
     if (typeof routed === "string") return { ...base, path: "faq", routerModel, skip: routed };
     r = { ...base, path: "faq", fn: routed.call.fn, routerModel, routerUsage: routed.usage };
     if (routed.call.fn === "complex" || !allowedIn(input.stage, routed.call.fn)) return complex({ ...r, fn: null });
+    // "dale", "sí", "100" answering the bot's own question only look vague to the router,
+    // which sees a few short turns: the main model reads them as the answer they are.
+    if (routed.call.fn === "unclear" && lastOther >= 0 && /\?\s*$/.test(input.turns[lastOther].text)) return complex({ ...r, fn: null });
     // The router names a learned answer by its number in the prompt; the answer needs its id.
     if (routed.call.fn === "learned") {
       const fact = facts[(routed.call.args.n ?? 0) - 1];

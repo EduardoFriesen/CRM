@@ -247,6 +247,30 @@ describe("answerTurn", () => {
     expect(typeof r !== "string" && r.text).toBe(`${fill("intro", { tenant: "Panadería" }, () => 0)}\n${fill("hours", { hours: "de 8 a 20" }, () => 0)}`);
   });
 
+  it("a short reply to the bot's question goes to the main model, not to unclear", async () => {
+    const t = await makeTenant();
+    const turns: HistoryTurn[] = [
+      { role: "user", text: "hacen descuento por cantidad?" },
+      { role: "assistant", text: "A partir de 200 m² se aplica un 10%. ¿Querés calcular con ese descuento?" },
+      { role: "user", text: "dale" },
+    ];
+    const i = input(turns, routerFor("unclear", {}));
+    expect(await answerTurn(t.id, i)).toMatchObject({ path: "complex" });
+    expect(i.runComplex).toHaveBeenCalledOnce();
+  });
+
+  it("an unclear message after a statement still gets the template", async () => {
+    const t = await makeTenant();
+    const turns: HistoryTurn[] = [
+      { role: "user", text: "tienen pan?" },
+      { role: "assistant", text: "Sí, tenemos pan de campo." },
+      { role: "user", text: "eso" },
+    ];
+    const i = input(turns, routerFor("unclear", {}));
+    expect(await answerTurn(t.id, i)).toMatchObject({ path: "faq", fn: "unclear" });
+    expect(i.runComplex).not.toHaveBeenCalled();
+  });
+
   it("introducing itself on an unclear message sends only the introduction", async () => {
     const t = await makeTenant();
     const r = await answerTurn(t.id, input(customer("eso"), routerFor("unclear", {}), { introduce: true, pick: () => 0 }));
