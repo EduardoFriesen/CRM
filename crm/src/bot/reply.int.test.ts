@@ -75,7 +75,7 @@ describe("runConversation", () => {
 
   it("caches the system prompt for anthropic", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const model = new MockLanguageModelV4({ doGenerate: text("ok") });
     await runConversation(t.id, c.id, { model, send: sendOk() });
     const sys = model.doGenerateCalls[0].prompt.filter((m) => m.role === "system");
@@ -107,7 +107,7 @@ describe("runConversation", () => {
   it("counts a refused call as a request without tokens", async () => {
     const { t, c } = await setup();
     await ownerSql`delete from ai_usage where tenant_id = ${t.id}`; // setup's key verification also counts
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const model = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new APICallError({ message: "quota", url: "https://x", requestBodyValues: {}, statusCode: 429, responseBody: "PerDay" });
@@ -169,7 +169,7 @@ describe("runConversation", () => {
 
   it("claims its own message when the webhook echo stored it first as admin", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const send = vi.fn(async () => {
       await ownerSql`insert into messages (tenant_id, contact_id, direction, author, body, wa_message_id, sent_at)
         values (${t.id}, ${c.id}, 'out', 'admin', 'Hola!', 'ECHO1', now())`;
@@ -182,7 +182,7 @@ describe("runConversation", () => {
 
   it("stays quiet when the last message is not from the customer", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola", 2);
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?", 2);
     await say(t.id, c.id, "admin", "Hola Ana, te atiendo yo", 1);
     const send = sendOk();
     expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send })).toBe(
@@ -204,7 +204,7 @@ describe("runConversation", () => {
 
   it("marks the key invalid on 401, sends nothing and stops answering", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const model = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new APICallError({ message: "unauthorized", url: "https://x", requestBodyValues: {}, statusCode: 401 });
@@ -219,7 +219,7 @@ describe("runConversation", () => {
 
   it("does nothing while the bot is off", async () => {
     const { t, c } = await setup({ enabled: false });
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const send = sendOk();
     expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send })).toBe(
       "skipped:disabled",
@@ -228,7 +228,7 @@ describe("runConversation", () => {
 
   it("introduces itself on a fresh conversation only", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const first = new MockLanguageModelV4({ doGenerate: text("Hola!") });
     await runConversation(t.id, c.id, { model: first, send: sendOk() });
     expect(JSON.stringify(first.doGenerateCalls[0].prompt)).toContain("asistente virtual");
@@ -244,7 +244,7 @@ describe("runConversation", () => {
     await say(t.id, c.id, "customer", "Quiero 50 m2 de gramilla", 3 * 24 * 60);
     await say(t.id, c.id, "bot", "Te atiende alguien del equipo.", 3 * 24 * 60 - 1);
     await ownerSql`update contacts set reopened_at = now() - interval '1 minute' where id = ${c.id}`;
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const model = new MockLanguageModelV4({ doGenerate: text("¡Hola!") });
     await runConversation(t.id, c.id, { model, send: sendOk() });
     const prompt = JSON.stringify(model.doGenerateCalls[0].prompt);
@@ -254,7 +254,7 @@ describe("runConversation", () => {
 
   it("introduces itself again after a reopen", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola", 60);
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?", 60);
     await say(t.id, c.id, "bot", "¡Hola! Soy el asistente virtual.", 59);
     await ownerSql`update contacts set reopened_at = now() - interval '1 minute' where id = ${c.id}`;
     await say(t.id, c.id, "customer", "¿Tienen pan?");
@@ -266,7 +266,7 @@ describe("runConversation", () => {
   it("renews the hourly reply cap when the customer is back in consulta", async () => {
     const { t, c } = await setup();
     for (let i = 0; i < 20; i++) await say(t.id, c.id, "bot", `r${i}`, 30);
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const run = () => runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send: sendOk() });
     expect(await run()).toBe("skipped:rate-limit");
     await ownerSql`update contacts set consulta_since = now() - interval '1 minute' where id = ${c.id}`;
@@ -285,7 +285,7 @@ describe("runConversation", () => {
 
   it("records the error code and rethrows transient failures so the queue retries", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const model = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new APICallError({ message: "overloaded", url: "https://x", requestBodyValues: {}, statusCode: 529, isRetryable: true });
@@ -297,7 +297,7 @@ describe("runConversation", () => {
 
   it("still answers a message the customer sent while the previous reply was being generated", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola", 1);
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?", 1);
     const model = new MockLanguageModelV4({
       doGenerate: async () => {
         await say(t.id, c.id, "customer", "Ah, y ¿hacen envíos?");
@@ -312,7 +312,7 @@ describe("runConversation", () => {
 
   it("does not send if the admin answered while the reply was being generated", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola", 1);
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?", 1);
     const model = new MockLanguageModelV4({
       doGenerate: async () => {
         await say(t.id, c.id, "admin", "Hola Ana, te atiendo yo");
@@ -339,7 +339,7 @@ describe("runConversation", () => {
 
   it("stops on an exhausted daily quota instead of retrying", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const model = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new APICallError({
@@ -362,7 +362,7 @@ describe("runConversation", () => {
     vi.stubEnv("OLLAMA_URL", "");
     const { t, c } = await setup();
     await ownerSql`update agent_configs set provider = 'ollama' where tenant_id = ${t.id}`;
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const send = sendOk();
     expect(await runConversation(t.id, c.id, { send })).toBe("skipped:model-error");
     expect(send).not.toHaveBeenCalled();
@@ -372,7 +372,7 @@ describe("runConversation", () => {
 
   it("does not retry permanent model errors and records them", async () => {
     const { t, c } = await setup();
-    await say(t.id, c.id, "customer", "Hola");
+    await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
     const model = new MockLanguageModelV4({
       doGenerate: async () => {
         throw new APICallError({ message: "model not found", url: "https://x", requestBodyValues: {}, statusCode: 404, isRetryable: false });
@@ -481,7 +481,7 @@ describe("runConversation", () => {
     it("stays quiet while the conversation is paused, and answers new messages once the pause is over", async () => {
       const { t, c } = await setup();
       await ownerSql`update contacts set bot_paused_until = now() + interval '1 hour' where id = ${c.id}`;
-      await say(t.id, c.id, "customer", "Hola");
+      await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
       const send = sendOk();
       expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send })).toBe("skipped:paused");
       expect(send).not.toHaveBeenCalled();
@@ -504,7 +504,7 @@ describe("runConversation", () => {
 
     it("stores a normal reply with handoff = false", async () => {
       const { t, c } = await setup();
-      await say(t.id, c.id, "customer", "Hola");
+      await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
       await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("¡Hola!") }), send: vi.fn(async () => ({ id: "PLAIN-1" })) });
       const [row] = await ownerSql<{ handoff: boolean }[]>`select handoff from messages where wa_message_id = 'PLAIN-1'`;
       expect(row.handoff).toBe(false);

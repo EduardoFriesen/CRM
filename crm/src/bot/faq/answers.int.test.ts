@@ -103,9 +103,35 @@ describe("answerFaq", () => {
     expect(await answerFaq(t.id, { fn: "hours", args: {} })).toBeNull();
   });
 
-  it("unclear and handoff always answer", async () => {
+  it("catalog lists every product with its price and marks the ones out of stock", async () => {
     const t = await makeTenant();
-    for (const fn of ["unclear", "handoff"] as const) {
+    await add(t.id, "Kikuyo", "10000", "5");
+    await add(t.id, "Gramilla", "8000", "0");
+    const out = (await answerFaq(t.id, { fn: "catalog", args: {} })) as string;
+    const lines = out.split("\n");
+    expect(lines.find((l) => l.includes("Kikuyo"))).toContain("$10.000");
+    expect(lines.find((l) => l.includes("Kikuyo"))).not.toContain("sin stock");
+    expect(lines.find((l) => l.includes("Gramilla"))).toContain("sin stock");
+    expect(out).not.toMatch(/más opciones/);
+  });
+
+  it("catalog lists 10 and offers more when there are more", async () => {
+    const t = await makeTenant();
+    for (let i = 0; i < 11; i++) await add(t.id, `Producto ${String(i).padStart(2, "0")}`, "100", "1");
+    const out = (await answerFaq(t.id, { fn: "catalog", args: {} })) as string;
+    expect(out).toContain("Producto 09");
+    expect(out).not.toContain("Producto 10");
+    expect(out).toMatch(/más opciones/);
+  });
+
+  it("catalog is null when the catalog is empty", async () => {
+    const t = await makeTenant();
+    expect(await answerFaq(t.id, { fn: "catalog", args: {} })).toBeNull();
+  });
+
+  it("unclear, greeting and handoff always answer", async () => {
+    const t = await makeTenant();
+    for (const fn of ["unclear", "greeting", "handoff"] as const) {
       const out = await answerFaq(t.id, { fn, args: {} });
       expect(out).toBeTruthy();
       expect(out).not.toContain("{");

@@ -36,6 +36,10 @@ describe("templates", () => {
     for (const v of TEMPLATES.handoff) expect(v).not.toMatch(/genial|perfecto|cerrar|avanzar/i);
   });
 
+  it("greeting says hello and asks what they need", () => {
+    for (const v of TEMPLATES.greeting) expect(v).toMatch(/^¡(hola|buenas)/i);
+  });
+
   it("unclear invites the customer instead of apologizing", () => {
     for (const v of TEMPLATES.unclear) expect(v).not.toMatch(/perd[oó]n|no te (entend|pesqu)/i);
   });

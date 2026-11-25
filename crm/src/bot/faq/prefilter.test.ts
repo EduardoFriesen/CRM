@@ -28,6 +28,7 @@ describe("prefilter", () => {
   it("maps obvious questions", () => {
     expect(prefilter("a que hora abren?", null)).toEqual({ kind: "faq", fn: "hours", args: {} });
     expect(prefilter("dónde están?", null)).toMatchObject({ fn: "location" });
+    expect(prefilter("como llego a su local", null)).toMatchObject({ fn: "location" });
     expect(prefilter("aceptan mercadopago?", null)).toMatchObject({ fn: "payment_methods" });
     expect(prefilter("aceptan mercado pago?", null)).toMatchObject({ fn: "payment_methods" });
     expect(prefilter("hacen envios?", null)).toMatchObject({ fn: "shipping" });
@@ -45,6 +46,19 @@ describe("prefilter", () => {
     }
     expect(prefilter("aceptan mercado pago?", null)).toMatchObject({ fn: "payment_methods" });
     expect(prefilter("medios de pago?", null)).toMatchObject({ fn: "payment_methods" });
+  });
+
+  it("answers a bare greeting without the router", () => {
+    for (const t of ["hola", "Hola!!", "buenas", "buen día", "Buenas tardes 😊", "hola buenas", "holaa", "holis", "hola\nbuenas noches", "holaa como andan", "hola, ¿cómo estás?", "buenas, que tal"]) {
+      expect(prefilter(t, null), t).toEqual({ kind: "faq", fn: "greeting", args: {} });
+    }
+    expect(prefilter("hola", "¿En qué te puedo ayudar?")).toMatchObject({ fn: "greeting" });
+  });
+
+  it("a greeting with a question or request is not a bare greeting", () => {
+    for (const t of ["hola, cuanto sale el kikuyo?", "hola\nme interesa", "buenas, hacen envios?", "que tal el kikuyo"]) {
+      expect(prefilter(t, null), t).not.toMatchObject({ fn: "greeting" });
+    }
   });
 
   it("does not misfire on unrelated words", () => {

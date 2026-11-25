@@ -113,7 +113,7 @@ describe("tryAgent", () => {
         throw new APICallError({ message: "quota", url: "https://x", requestBodyValues: {}, statusCode: 429, responseBody: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" });
       },
     });
-    expect(await tryAgent(t.id, [{ role: "user", text: "Hola" }], { model })).toMatchObject({
+    expect(await tryAgent(t.id, [{ role: "user", text: "Hola, ¿qué me recomendás?" }], { model })).toMatchObject({
       success: false,
       error: { code: "QUOTA_EXCEEDED", message: expect.stringMatching(/cuota/i) },
     });

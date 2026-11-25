@@ -99,9 +99,9 @@ export async function answerTurn(
     r = { ...r, path: "handoff", handoff: true };
   }
   if (!input.introduce) return { ...r, text: answer };
-  // The introduction already asks what they need: an unclear message gets only that.
+  // The introduction already greets and asks what they need: a greeting or unclear message gets only that.
   const intro = fill("intro", { tenant: input.tenantName }, input.pick);
-  return { ...r, text: call.fn === "unclear" ? intro : `${intro}\n${answer}` };
+  return { ...r, text: call.fn === "unclear" || call.fn === "greeting" ? intro : `${intro}\n${answer}` };
 }
 
 // The router call is metered and its errors classified like the main model's, except that a

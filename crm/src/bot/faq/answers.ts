@@ -4,6 +4,7 @@ import { fill, type TemplateKey } from "./templates";
 import type { FaqCall } from "./types";
 
 const MAX_LISTED = 3;
+const MAX_CATALOG = 10;
 
 const BUSINESS_FIELDS = {
   hours: { field: "hours", key: "hours", template: "hours" },
@@ -16,17 +17,36 @@ const BUSINESS_FIELDS = {
 export async function answerFaq(tenantId: string, call: FaqCall, pick?: () => number): Promise<string | null> {
   switch (call.fn) {
     case "unclear":
+    case "greeting":
     case "handoff":
       return fill(call.fn, {}, pick);
     case "price":
     case "stock":
       return answerProduct(tenantId, call, pick);
+    case "catalog":
+      return answerCatalog(tenantId, pick);
     default: {
       const { field, key, template } = BUSINESS_FIELDS[call.fn];
       const value = (await getBusinessProfile(tenantId))[field].trim();
       return value ? fill(template, { [key]: value }, pick) : null;
     }
   }
+}
+
+type Hit = Awaited<ReturnType<typeof searchCatalog>>[number];
+
+const priceLine = (h: Hit) => `• ${h.name}: ${h.price}${h.availability === "sin stock" ? " (sin stock)" : ""}`;
+
+// The first `max` hits as a list, plus an offer when more were found.
+function listing(hits: Hit[], max: number, line: (h: Hit) => string, pick?: () => number): string {
+  const text = fill("price_many", { list: hits.slice(0, max).map(line).join("\n") }, pick);
+  return hits.length > max ? `${text}\n${fill("price_more", {}, pick)}` : text;
+}
+
+async function answerCatalog(tenantId: string, pick?: () => number): Promise<string | null> {
+  // One extra hit tells whether there are more than we list.
+  const hits = await searchCatalog(tenantId, "", MAX_CATALOG + 1);
+  return hits.length === 0 ? null : listing(hits, MAX_CATALOG, priceLine, pick);
 }
 
 async function answerProduct(tenantId: string, call: FaqCall, pick?: () => number): Promise<string | null> {
@@ -42,13 +62,6 @@ async function answerProduct(tenantId: string, call: FaqCall, pick?: () => numbe
     return fill("price_one", { name: h.name, price: h.price, note: out ? " (por ahora sin stock)" : "" }, pick);
   }
 
-  const list = hits
-    .slice(0, MAX_LISTED)
-    .map((h) => {
-      const tag = h.availability === "sin stock" ? " (sin stock)" : "";
-      return call.fn === "price" ? `• ${h.name}: ${h.price}${tag}` : `• ${h.name}: ${h.availability}`;
-    })
-    .join("\n");
-  const text = fill("price_many", { list }, pick);
-  return hits.length > MAX_LISTED ? `${text}\n${fill("price_more", {}, pick)}` : text;
+  const line = call.fn === "price" ? priceLine : (h: Hit) => `• ${h.name}: ${h.availability}`;
+  return listing(hits, MAX_LISTED, line, pick);
 }

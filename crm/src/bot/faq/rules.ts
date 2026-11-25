@@ -4,6 +4,13 @@ import type { FaqName } from "./types";
 export const TRIVIAL =
   /^[\s\p{P}\p{S}\p{M}\u200d]*(?:(?:ok|oka|okey|gracias|muchas gracias|dale|listo|joya|genial|perfecto|buenisimo)[\s\p{P}\p{S}\p{M}\u200d]*)*$/u;
 
+// One line of `plain` text that is only a greeting, with optional emojis/punctuation.
+const SEP = String.raw`[\s\p{P}\p{S}\p{M}\u200d]*`;
+export const GREETING = new RegExp(
+  `^${SEP}(?:(?:hola+s?|holis|buenas (?:tardes|noches)|buenos dias|buen dia|buenas|que tal|como (?:andan|andas|estas|estan|va|anda))${SEP})+$`,
+  "u",
+);
+
 // Order matters: paying (asking how, saying they will or did) must be a handoff before
 // "mercado pago" or "efectivo" reads as payment info.
 export const RULES: { pattern: RegExp; fn: FaqName }[] = [
@@ -12,7 +19,7 @@ export const RULES: { pattern: RegExp; fn: FaqName }[] = [
     fn: "handoff",
   },
   { pattern: /\b(horarios?|abren|cierran|atienden)\b/, fn: "hours" },
-  { pattern: /\b(direccion|donde (estan|quedan|queda)|ubicacion)\b/, fn: "location" },
+  { pattern: /\b(direccion|donde (estan|quedan|queda)|ubicacion|como llego)\b/, fn: "location" },
   { pattern: /\b(medios de pago|aceptan tarjeta|mercado ?pago|efectivo)\b/, fn: "payment_methods" },
   { pattern: /\b(envios?|envian|delivery)\b/, fn: "shipping" },
 ];

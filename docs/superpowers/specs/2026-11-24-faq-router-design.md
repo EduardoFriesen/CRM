@@ -136,7 +136,7 @@ mensajes del cliente (debounce existente)
   catálogo, sin info del negocio, sin aprendidos, sin reglas de venta.
 - Tools del router (descripciones de una línea):
   `price(product)`, `stock(product)`, `hours()`, `location()`, `payment_methods()`,
-  `shipping(zone?)`, `handoff(reason)`, `unclear()`, `complex()`.
+  `shipping(zone?)`, `handoff(reason)`, `catalog()`, `greeting()`, `unclear()`, `complex()`.
 - Si el router falla (error del proveedor, respuesta sin tool call, args inválidos según
   Zod): camino complejo. Errores de key inválida o cuota se manejan igual que hoy
   (`generateOrRecord`).
@@ -157,6 +157,8 @@ Cada función recibe los args del router y el tenant, consulta datos y devuelve
 | `shipping` | Negocio · envíos | idem (la zona no se interpreta: se muestra lo cargado) | campo vacío |
 | `handoff` | — | `handOff()` existente + plantilla de traspaso | nunca |
 | `unclear` | — | plantilla de pedido de aclaración | nunca |
+| `catalog` | `searchCatalog` sin filtro | hasta 10 productos con precio (+ "sin stock" si aplica); si hay más, "tengo más opciones" | catálogo vacío |
+| `greeting` | — | primer contacto: solo la intro; después: plantilla de saludo corto. La regla `GREETING` (`rules.ts`) lo resuelve sin router si el mensaje es solo un saludo | nunca |
 
 - Plantillas: 2-3 variantes por función, en rioplatense con voseo, elegidas al azar
   (función de azar inyectable para tests). Variables con `{nombre}`.

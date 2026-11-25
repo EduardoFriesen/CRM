@@ -134,7 +134,7 @@ const normalize = (s: string) =>
 // What the bot may say about a product: never the stock quantity.
 // ponytail: filters active products in memory; fine up to a few hundred products per
 // tenant. Move to unaccent + trigram index if catalogs grow.
-export async function searchCatalog(tenantId: string, query: string): Promise<CatalogHit[]> {
+export async function searchCatalog(tenantId: string, query: string, limit = 10): Promise<CatalogHit[]> {
   const rows = await withTenant(tenantId, (tx) =>
     tx.select().from(products).where(eq(products.active, true)).orderBy(asc(products.name)),
   );
@@ -144,7 +144,7 @@ export async function searchCatalog(tenantId: string, query: string): Promise<Ca
       const text = normalize(`${p.name} ${p.description}`);
       return words.every((w) => text.includes(w));
     })
-    .slice(0, 10)
+    .slice(0, limit)
     .map((p) => ({
       name: p.name,
       description: p.description,

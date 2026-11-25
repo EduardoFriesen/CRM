@@ -10,6 +10,7 @@ export type TemplateKey =
   | "shipping"
   | "handoff"
   | "unclear"
+  | "greeting"
   | "intro";
 
 // Customer-facing copy: rioplatense, short, WhatsApp style. Never stock quantities.
@@ -29,8 +30,9 @@ export const TEMPLATES: Record<TemplateKey, string[]> = {
     "Ya le aviso a una persona del equipo para que te escriba.",
     "Te va a escribir alguien del equipo en un rato.",
   ],
-  // A bare "Hola" lands here too: invite, don't apologize.
+  // Invite, don't apologize.
   unclear: ["Contame, ¿qué estás buscando?", "¿En qué te puedo ayudar?", "Decime, ¿qué necesitás?"],
+  greeting: ["¡Hola! ¿En qué te puedo ayudar?", "¡Buenas! Contame, ¿qué necesitás?", "¡Hola! ¿Qué estás buscando?"],
   intro: ["¡Hola! Soy el asistente de {tenant}. ¿En qué te puedo ayudar?", "¡Buenas! Te escribe el asistente de {tenant}. Contame, ¿qué necesitás?"],
 };
 

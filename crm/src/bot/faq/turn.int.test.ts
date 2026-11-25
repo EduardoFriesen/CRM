@@ -111,8 +111,16 @@ describe("answerTurn", () => {
 
   it("introducing itself on an unclear message sends only the introduction", async () => {
     const t = await makeTenant();
-    const r = await answerTurn(t.id, input(customer("hola"), routerFor("unclear", {}), { introduce: true, pick: () => 0 }));
+    const r = await answerTurn(t.id, input(customer("eso"), routerFor("unclear", {}), { introduce: true, pick: () => 0 }));
     expect(r).toMatchObject({ path: "faq", fn: "unclear", text: fill("intro", { tenant: "Panadería" }, () => 0) });
+  });
+
+  it("a greeting skips the router: introduction on first contact, a short hello later", async () => {
+    const t = await makeTenant();
+    const first = await answerTurn(t.id, input(customer("hola"), null, { introduce: true, pick: () => 0 }));
+    expect(first).toMatchObject({ path: "prefilter", fn: "greeting", text: fill("intro", { tenant: "Panadería" }, () => 0) });
+    const later = await answerTurn(t.id, input(customer("hola"), null, { introduce: false, pick: () => 0 }));
+    expect(later).toMatchObject({ path: "prefilter", fn: "greeting", text: fill("greeting", {}, () => 0) });
   });
 
   it("classifies the customer block after the last bot turn, and no router means complex", async () => {

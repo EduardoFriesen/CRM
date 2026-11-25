@@ -6,7 +6,9 @@ export type FaqName =
   | "payment_methods"
   | "shipping"
   | "handoff"
-  | "unclear";
+  | "unclear"
+  | "greeting"
+  | "catalog";
 
 export type FaqArgs = { product?: string; zone?: string; reason?: string };
 
