@@ -7,6 +7,9 @@ import type { FaqCall } from "./types";
 export type RouterCall = FaqCall | { fn: "complex"; args: Record<string, never> };
 
 export const ROUTER_TURNS = 3;
+export const ROUTER_FACTS = 30;
+const CLIP = 120;
+const clip = (s: string) => (s.length > CLIP ? `${s.slice(0, CLIP)}…` : s);
 
 const product = z.object({ product: z.string().trim().min(1).max(100) });
 const none = z.object({});
@@ -74,10 +77,22 @@ No inventes datos.`;
 
 const COMPLEX: RouterCall = { fn: "complex", args: {} };
 
+// Offered only when the business has learned answers; `n` is the question's number in the prompt.
+const LEARNED = z.object({ n: z.number().int().min(1) });
+const LEARNED_TOOL = tool({ description: "The customer asks the same as one of the questions the business already answered.", inputSchema: LEARNED });
+
+function learnedSection(facts: { question: string }[]): string {
+  if (facts.length === 0) return "";
+  const list = facts.map((f, i) => `${i + 1}. ${clip(f.question)}`).join("\n");
+  return `\n- learned: el cliente pregunta lo mismo que una de las preguntas ya respondidas (aunque con otras palabras); indicá su número. Si no es claramente la misma, no la elijas.\nPreguntas ya respondidas por el negocio:\n${list}`;
+}
+
 export async function routeMessage(
   model: LanguageModel,
   turns: HistoryTurn[],
+  ctx: { facts?: { question: string }[] } = {},
 ): Promise<{ call: RouterCall; usage: TurnUsage }> {
+  const facts = (ctx.facts ?? []).slice(0, ROUTER_FACTS);
   // The SDK throws on malformed output and drops the usage with it; read it off the raw provider result.
   const usage: TurnUsage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
   const metered = wrapLanguageModel({
@@ -96,14 +111,18 @@ export async function routeMessage(
   try {
     const r = await generateText({
       model: metered,
-      instructions: INSTRUCTIONS,
+      instructions: INSTRUCTIONS + learnedSection(facts),
       messages: toModelMessages(turns.slice(-ROUTER_TURNS), { toolCalls: false }),
-      tools: TOOLS,
+      tools: facts.length ? { ...TOOLS, learned: LEARNED_TOOL } : TOOLS,
       toolChoice: "required",
       maxOutputTokens: 200,
       maxRetries: 0,
     });
     const tc = r.toolCalls[0];
+    if (tc?.toolName === "learned") {
+      const l = LEARNED.safeParse(tc.input);
+      return { call: l.success && l.data.n <= facts.length ? { fn: "learned", args: { n: l.data.n } } : COMPLEX, usage };
+    }
     const schema = tc && tc.toolName in SCHEMAS ? SCHEMAS[tc.toolName as keyof typeof SCHEMAS] : undefined;
     const parsed = schema?.safeParse(tc.input);
     return { call: parsed?.success ? ({ fn: tc.toolName, args: parsed.data } as RouterCall) : COMPLEX, usage };

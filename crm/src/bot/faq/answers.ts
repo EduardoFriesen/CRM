@@ -2,7 +2,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getBusinessProfile } from "@/business/profile";
 import { matchProducts, searchCatalog } from "@/catalog/catalog";
 import { withTenant } from "@/db/client";
-import { orders } from "@/db/schema";
+import { businessFacts, orders } from "@/db/schema";
+import { z } from "zod";
 import { formatPrice } from "@/lib/money";
 import { plain } from "@/lib/plain";
 import { fill, type TemplateKey } from "./templates";
@@ -34,6 +35,8 @@ export async function answerFaq(tenantId: string, call: FaqCall, pick?: () => nu
       return answerProduct(tenantId, call, pick);
     case "catalog":
       return answerCatalog(tenantId, pick);
+    case "learned":
+      return answerLearned(tenantId, call.args.factId);
     case "order_status":
       return contactId ? answerOrder(tenantId, contactId, pick) : null;
     case "quote":
@@ -88,6 +91,15 @@ async function answerQuote(tenantId: string, items: QuoteItem[], pick?: () => nu
     lines.push(`• ${p.name}: ${qty} × ${formatPrice(p.price)} = ${formatPrice(cents / 100)}`);
   }
   return fill("quote", { lines: lines.join("\n"), total: formatPrice(total / 100) }, pick);
+}
+
+// The admin's own words, as they wrote them: no template around them.
+async function answerLearned(tenantId: string, factId: string | undefined): Promise<string | null> {
+  if (!z.uuid().safeParse(factId).success) return null;
+  const [row] = await withTenant(tenantId, (tx) =>
+    tx.select({ answer: businessFacts.answer }).from(businessFacts).where(eq(businessFacts.id, factId!)),
+  );
+  return row?.answer.trim() || null;
 }
 
 const day = new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });

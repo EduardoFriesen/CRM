@@ -58,6 +58,32 @@ describe("routeMessage", () => {
     }
   });
 
+  const sysOf = (m: MockLanguageModelV4) => m.doGenerateCalls[0].prompt.filter((p) => p.role === "system").map((p) => p.content).join("");
+
+  it("offers learned only when there are facts, numbered in the prompt", async () => {
+    const none = new MockLanguageModelV4({ doGenerate: call("hours", {}) });
+    await routeMessage(none, turns(1));
+    expect(none.doGenerateCalls[0].tools?.map((t) => t.name)).not.toContain("learned");
+    const some = new MockLanguageModelV4({ doGenerate: call("learned", { n: 2 }) });
+    const r = await routeMessage(some, turns(1), { facts: [{ question: "¿Hacen factura A?" }, { question: "¿Tienen estacionamiento?" }] });
+    expect(r.call).toEqual({ fn: "learned", args: { n: 2 } });
+    expect(sysOf(some)).toContain("1. ¿Hacen factura A?");
+    expect(sysOf(some)).toContain("2. ¿Tienen estacionamiento?");
+  });
+
+  it("learned with n out of range falls back to complex", async () => {
+    const m = new MockLanguageModelV4({ doGenerate: call("learned", { n: 3 }) });
+    expect((await routeMessage(m, turns(1), { facts: [{ question: "a" }, { question: "b" }] })).call.fn).toBe("complex");
+  });
+
+  it("sends at most 30 facts", async () => {
+    const m = new MockLanguageModelV4({ doGenerate: call("hours", {}) });
+    const facts = Array.from({ length: 35 }, (_, i) => ({ question: `pregunta ${i + 1}` }));
+    await routeMessage(m, turns(1), { facts });
+    expect(sysOf(m)).toContain("30. pregunta 30");
+    expect(sysOf(m)).not.toContain("31. pregunta 31");
+  });
+
   it("invalid args fall back to complex", async () => {
     const model = new MockLanguageModelV4({ doGenerate: call("price", { product: "" }) });
     expect((await routeMessage(model, turns(1))).call).toEqual({ fn: "complex", args: {} });

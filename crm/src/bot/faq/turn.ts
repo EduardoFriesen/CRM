@@ -5,7 +5,8 @@ import { classifyModelError, meter, type SkipOutcome, type TurnUsage } from "@/b
 import type { BotEvent, BotPath } from "@/usage/events";
 import { answerFaq } from "./answers";
 import { prefilter } from "./prefilter";
-import { routeMessage } from "./router";
+import { recentFacts } from "@/facts/facts";
+import { ROUTER_FACTS, routeMessage } from "./router";
 import { fill } from "./templates";
 import type { FaqCall } from "./types";
 
@@ -100,12 +101,14 @@ export async function answerTurn(
     r = { ...base, path: "prefilter", fn: decision.fn };
   } else {
     if (!input.routerModel) return complex(base);
-    const routed = await route(tenantId, input.routerModel, input.turns);
+    const facts = (await recentFacts(tenantId)).slice(0, ROUTER_FACTS);
+    const routed = await route(tenantId, input.routerModel, input.turns, facts);
     const routerModel = modelName(input.routerModel);
     if (typeof routed === "string") return { ...base, path: "faq", routerModel, skip: routed };
     r = { ...base, path: "faq", fn: routed.call.fn, routerModel, routerUsage: routed.usage };
     if (routed.call.fn === "complex" || !allowedIn(input.stage, routed.call.fn)) return complex({ ...r, fn: null });
-    call = routed.call;
+    // The router names a learned answer by its number in the prompt; the answer needs its id.
+    call = routed.call.fn === "learned" ? { fn: "learned", args: { factId: facts[(routed.call.args.n ?? 0) - 1]?.id } } : routed.call;
   }
 
   const out = await answerFaq(tenantId, call, input.pick, input.contactId);
@@ -126,9 +129,9 @@ export async function answerTurn(
 // The router call is metered and its errors classified like the main model's, except that a
 // permanent error (unknown model, no tool support…) is recorded and routes to the full bot:
 // a misconfigured router model must not silence the bot.
-async function route(tenantId: string, model: LanguageModel, turns: HistoryTurn[]) {
+async function route(tenantId: string, model: LanguageModel, turns: HistoryTurn[], facts: { question: string }[]) {
   try {
-    const routed = await routeMessage(model, turns);
+    const routed = await routeMessage(model, turns, { facts });
     await meter(tenantId, { requests: 1, inputTokens: routed.usage.inputTokens, outputTokens: routed.usage.outputTokens });
     return routed;
   } catch (e) {

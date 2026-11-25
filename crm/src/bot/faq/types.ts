@@ -11,11 +11,12 @@ export type FaqName =
   | "catalog"
   | "quote"
   | "farewell"
-  | "order_status";
+  | "order_status"
+  | "learned";
 
 export type QuoteItem = { product: string; quantity: number };
 
-export type FaqArgs = { product?: string; zone?: string; reason?: string; items?: QuoteItem[] };
+export type FaqArgs = { product?: string; zone?: string; reason?: string; items?: QuoteItem[]; n?: number; factId?: string };
 
 export type FaqCall = { fn: FaqName; args: FaqArgs };
 

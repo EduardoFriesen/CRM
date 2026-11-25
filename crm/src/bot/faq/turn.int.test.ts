@@ -156,6 +156,14 @@ describe("answerTurn", () => {
     expect(await answerTurn(t.id, i)).toMatchObject({ path: "complex" });
   });
 
+  it("the router's learned number maps to the fact id", async () => {
+    const t = await makeTenant();
+    await ownerSql`insert into business_facts (tenant_id, question, answer, updated_at) values
+      (${t.id}, 'vieja', 'respuesta vieja', '2026-10-01'), (${t.id}, 'nueva', 'respuesta nueva', '2026-11-01')`;
+    const r = await answerTurn(t.id, input(customer("eso de la nueva?"), routerFor("learned", { n: 1 })));
+    expect(r).toMatchObject({ path: "faq", fn: "learned", text: "respuesta nueva" });
+  });
+
   it("introduces itself on a template answer", async () => {
     const t = await makeTenant();
     await saveBusinessProfile(t.id, { hours: "de 8 a 20" });

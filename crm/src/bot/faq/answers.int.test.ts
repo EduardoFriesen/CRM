@@ -208,6 +208,27 @@ describe("answerFaq", () => {
     expect(await answerFaq(t.id, { fn: "order_status", args: {} }, () => 0)).toBeNull();
   });
 
+  const fact = async (tenantId: string, question: string, answer: string, updatedAt = "2026-11-01T00:00:00Z") => {
+    const [row] = await ownerSql<{ id: string }[]>`insert into business_facts (tenant_id, question, answer, updated_at)
+      values (${tenantId}, ${question}, ${answer}, ${updatedAt}) returning id`;
+    return row.id;
+  };
+
+  it("learned answers the admin's answer verbatim", async () => {
+    const t = await makeTenant();
+    const id = await fact(t.id, "¿Hacen factura A?", "Sí, hacemos factura A con tu CUIT.");
+    expect(await answerFaq(t.id, { fn: "learned", args: { factId: id } })).toBe("Sí, hacemos factura A con tu CUIT.");
+  });
+
+  it("learned is null for a deleted, unknown or malformed fact", async () => {
+    const t = await makeTenant();
+    const id = await fact(t.id, "q", "a");
+    await ownerSql`delete from business_facts where id = ${id}`;
+    expect(await answerFaq(t.id, { fn: "learned", args: { factId: id } })).toBeNull();
+    expect(await answerFaq(t.id, { fn: "learned", args: { factId: "nope" } })).toBeNull();
+    expect(await answerFaq(t.id, { fn: "learned", args: {} })).toBeNull();
+  });
+
   it("unclear, greeting and handoff always answer", async () => {
     const t = await makeTenant();
     for (const fn of ["unclear", "greeting", "farewell", "handoff"] as const) {
