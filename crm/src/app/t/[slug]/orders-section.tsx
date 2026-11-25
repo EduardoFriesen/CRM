@@ -2,15 +2,20 @@ import Link from "next/link";
 import { groupOrders } from "@/orders/group";
 import type { OrderView } from "@/orders/orders";
 import { OrderCard } from "./order-card";
+import type { OrderProduct } from "./order-form";
 
 export function OrdersSection({
   slug,
   pending,
   now,
+  products,
+  today,
 }: {
   slug: string;
   pending: OrderView[];
   now: Date;
+  products: OrderProduct[];
+  today: string;
 }) {
   const groups = groupOrders(pending, now);
   const sections: [string, OrderView[]][] = [
@@ -36,7 +41,7 @@ export function OrdersSection({
             <ul className="order-cards">
               {list.map((o) => (
                 <li key={o.id}>
-                  <OrderCard order={o} slug={slug} />
+                  <OrderCard order={o} slug={slug} edit={{ products, today }} overdue={title === "Atrasados"} />
                 </li>
               ))}
             </ul>

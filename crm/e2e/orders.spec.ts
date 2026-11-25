@@ -80,6 +80,51 @@ test("creating, delivering and cancelling orders", async ({ page }) => {
   await expect.poll(stock).toBe(8);
 });
 
+test("a pending order replaces Crear pedido and is edited from both cards", async ({ page }) => {
+  const [t] = await sql<{ id: string }[]>`select id from tenants where slug = ${slug}`;
+  const [caro] = await sql<{ id: string }[]>`insert into contacts (tenant_id, jid, phone, name, stage, last_message_at)
+    values (${t.id}, '5491122330003@s.whatsapp.net', '5491122330003', 'Caro', 'venta', now()) returning id`;
+  await page.goto(`/t/${slug}`);
+  await card(page, "Caro").getByRole("button", { name: /Crear pedido/ }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Producto 1").selectOption({ label: "Pan de campo · $2.500 · stock 8" });
+  await dialog.getByLabel("Cantidad 1").fill("2");
+  await dialog.getByLabel("Dirección").fill("Calle Caro 1");
+  await dialog.getByRole("button", { name: "Guardar pedido" }).click();
+  await expect.poll(stock).toBe(6);
+
+  const board = card(page, "Caro").filter({ has: page.getByRole("button", { name: /Volver a Consulta/ }) });
+  await expect(board.getByRole("button", { name: /Crear pedido/ })).toHaveCount(0);
+  await board.getByRole("button", { name: "Editar pedido de Caro" }).click();
+  const edit = page.getByRole("dialog");
+  await expect(edit.getByLabel("Dirección")).toHaveValue("Calle Caro 1");
+  await edit.getByLabel("Cantidad 1").fill("5");
+  await expect(edit.getByText("Total $12.500")).toBeVisible();
+  await edit.getByRole("button", { name: "Guardar pedido" }).click();
+  await expect.poll(stock).toBe(3);
+
+  const order = page.getByRole("region", { name: /Pedidos/ }).getByRole("article").filter({ hasText: "Caro" });
+  await expect(order).toContainText("$12.500");
+  await order.getByRole("button", { name: "Editar pedido de Caro" }).click();
+  await page.getByRole("dialog").getByLabel("Cantidad 1").fill("1");
+  await page.getByRole("dialog").getByRole("button", { name: "Guardar pedido" }).click();
+  await expect.poll(stock).toBe(7);
+  await expect(order).toContainText("Total $2.500");
+  await sql`update orders set status = 'cancelled' where contact_id = ${caro.id}`;
+  await sql`update products set stock = 8 where id = ${panId}`;
+});
+
+test("an overdue order is red and says so", async ({ page }) => {
+  const [t] = await sql<{ id: string }[]>`select id from tenants where slug = ${slug}`;
+  const [dani] = await sql<{ id: string }[]>`insert into contacts (tenant_id, jid, phone, name, stage, last_message_at)
+    values (${t.id}, '5491122330004@s.whatsapp.net', '5491122330004', 'Dani', 'venta', now()) returning id`;
+  await sql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${dani.id}, current_date - 3, 'Calle Dani', 1)`;
+  await page.goto(`/t/${slug}`);
+  const order = page.getByRole("region", { name: /Pedidos/ }).getByRole("article").filter({ hasText: "Calle Dani" });
+  await expect(order).toHaveClass(/overdue/);
+  await expect(order).toContainText("Atrasado");
+});
+
 test("explains where orders come from when there are none", async ({ page }) => {
   await page.goto(`/t/${emptySlug}`);
   await expect(page.getByText("Todavía no hay pedidos. Se crean desde un cliente en Venta.")).toBeVisible();

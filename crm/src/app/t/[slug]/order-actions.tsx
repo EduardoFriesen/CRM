@@ -1,9 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { cancelOrderAction, deliverOrderAction } from "./actions";
 
-export function OrderActions({ slug, orderId, contactName }: { slug: string; orderId: string; contactName: string }) {
+export function OrderActions({
+  slug,
+  orderId,
+  contactName,
+  children,
+}: {
+  slug: string;
+  orderId: string;
+  contactName: string;
+  /** Rendered first in the row (the edit button). */
+  children?: ReactNode;
+}) {
   const [pending, start] = useTransition();
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +31,7 @@ export function OrderActions({ slug, orderId, contactName }: { slug: string; ord
 
   return (
     <div className="row-actions">
+      {!confirming && children}
       {confirming ? (
         <>
           <button type="button" className="danger" disabled={pending} onClick={() => run(() => cancelOrderAction(slug, orderId))}>

@@ -158,10 +158,12 @@ describe("deliver and cancel", () => {
 });
 
 describe("updateOrder", () => {
-  const edit = (items: { productId: string; quantity: number }[], over: object = {}) => {
-    const { contactId: _, ...rest } = input("", items, over);
-    return rest;
-  };
+  const edit = (items: { productId: string; quantity: number }[], over: object = {}) => ({
+    items,
+    deliveryDate: baDate(1),
+    address: "Av. Siempre Viva 742",
+    ...over,
+  });
   const setup = async () => {
     const t = await makeTenant();
     const pan = await product(t.id, "Pan de campo", 2500, 10);

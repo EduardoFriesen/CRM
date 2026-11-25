@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { closeContact, setBotOff, setContactStage } from "@/contacts/contacts";
-import { cancelOrder, createOrder, deliverOrder, type OrderView } from "@/orders/orders";
+import { cancelOrder, createOrder, deliverOrder, updateOrder, type OrderView } from "@/orders/orders";
 import type { Result } from "@/lib/result";
 import type { Stage } from "@/db/schema";
 import { getCurrentTenant } from "@/tenants/tenants";
@@ -39,6 +39,13 @@ const revalidateOrders = (slug: string) => {
 export async function createOrderAction(slug: string, input: unknown): Promise<Result<OrderView>> {
   const tenant = await getCurrentTenant(slug);
   const result = await createOrder(tenant.id, input);
+  if (result.success) revalidateOrders(tenant.slug);
+  return result;
+}
+
+export async function updateOrderAction(slug: string, id: string, input: unknown): Promise<Result<OrderView>> {
+  const tenant = await getCurrentTenant(slug);
+  const result = await updateOrder(tenant.id, id, input);
   if (result.success) revalidateOrders(tenant.slug);
   return result;
 }

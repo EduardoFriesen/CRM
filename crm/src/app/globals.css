@@ -1225,3 +1225,12 @@ button.danger:hover:not(:disabled) {
 .card-foot {
   flex-wrap: wrap;
 }
+
+/* A pending order whose delivery date passed. */
+.order-card.overdue {
+  border-color: var(--danger);
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+.overdue-tag {
+  color: var(--danger);
+}

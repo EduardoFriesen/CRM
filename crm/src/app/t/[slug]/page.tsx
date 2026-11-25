@@ -9,7 +9,8 @@ import { listProducts } from "@/catalog/catalog";
 import { listOrders } from "@/orders/orders";
 import { todayInBuenosAires } from "@/orders/group";
 import { getCurrentTenant } from "@/tenants/tenants";
-import { CreateOrderButton, type OrderProduct } from "./order-form";
+import { OrderFormButton, type OrderProduct } from "./order-form";
+import type { OrderView } from "@/orders/orders";
 import { OrdersSection } from "./orders-section";
 import { AutoRefresh } from "./auto-refresh";
 import { CloseContactButton } from "./close-contact-button";
@@ -58,11 +59,11 @@ export default async function BoardPage({ params }: { params: Promise<{ slug: st
       ) : (
         <div className="board">
           {STAGES.map((stage) => (
-            <Column key={stage} stage={stage} contacts={board[stage]} slug={tenant.slug} now={now} products={products} today={today} />
+            <Column key={stage} stage={stage} contacts={board[stage]} slug={tenant.slug} now={now} products={products} today={today} orders={pendingOrders} />
           ))}
         </div>
       )}
-      <OrdersSection slug={tenant.slug} pending={pendingOrders} now={now} />
+      <OrdersSection slug={tenant.slug} pending={pendingOrders} now={now} products={products} today={today} />
     </main>
   );
 }
@@ -90,7 +91,7 @@ const pauseClock = new Intl.DateTimeFormat("es-AR", {
   hour12: false,
 });
 
-type OrderContext = { products: OrderProduct[]; today: string };
+type OrderContext = { products: OrderProduct[]; today: string; orders: OrderView[] };
 
 function Column({
   stage,
@@ -99,6 +100,7 @@ function Column({
   now,
   products,
   today,
+  orders,
 }: { stage: Stage; contacts: BoardContact[]; slug: string; now: Date } & OrderContext) {
   const id = `col-${stage}`;
   return (
@@ -112,7 +114,7 @@ function Column({
         <ul className="cards">
           {contacts.map((c) => (
             <li key={c.id}>
-              <Card contact={c} stage={stage} slug={slug} now={now} products={products} today={today} />
+              <Card contact={c} stage={stage} slug={slug} now={now} products={products} today={today} orders={orders} />
             </li>
           ))}
         </ul>
@@ -128,6 +130,7 @@ function Card({
   now,
   products,
   today,
+  orders,
 }: { contact: BoardContact; stage: Stage; slug: string; now: Date } & OrderContext) {
   const name = contact.name ?? (contact.phone ? `+${contact.phone}` : "Sin nombre");
   const href = waLink(contact.phone);
@@ -183,7 +186,14 @@ function Card({
         {stage === "venta" && (
           <>
             <StageButton slug={slug} contactId={contact.id} name={name} to="consulta" />
-            <CreateOrderButton slug={slug} contactId={contact.id} contactName={name} products={products} today={today} />
+            <OrderFormButton
+              slug={slug}
+              contactId={contact.id}
+              contactName={name}
+              products={products}
+              today={today}
+              order={orders.find((o) => o.id === contact.pendingOrderId)}
+            />
           </>
         )}
         {stage === "postventa" ? (
