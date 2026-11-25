@@ -45,7 +45,7 @@ const TOOLS = Object.fromEntries(
 const INSTRUCTIONS = `Sos un clasificador de mensajes de clientes de un negocio por WhatsApp.
 Elegí exactamente una función según el ÚLTIMO mensaje del cliente; el contexto previo solo sirve para entenderlo.
 - price / stock: pregunta por el precio o la disponibilidad de un producto (indicá el producto).
-- hours, location, payment_methods, shipping: preguntas frecuentes sobre el negocio. shipping es solo si hacen envíos, zonas o costo; un reclamo o consulta por un pedido concreto ("mi envío no llegó") es handoff.
+- hours, location, payment_methods, shipping: preguntas frecuentes sobre el negocio. shipping es solo si hacen envíos, zonas o costo; un reclamo o consulta por un pedido ya hecho es handoff.
 - Ingredientes, alérgenos o características de un producto no son stock: son complex.
 - handoff: quiere comprar, pagar, reservar, hablar con una persona o hacer un reclamo (indicá el motivo).
 - unclear: mensaje demasiado vago para saber qué quiere.

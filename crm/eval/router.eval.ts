@@ -38,6 +38,10 @@ const cases: Case[] = [
   { text: "q diferencia hay entre el pan de campo y el integral?", expected: "complex" },
   { text: "tiene gluten el pan de campo?", expected: "complex" },
   { text: "me recomendas algo para regalar a mi suegra?", expected: "complex" },
+  // Held-out: added after the prompt was tuned, phrasings the instructions do not quote.
+  { text: "mi pedido llego mal", expected: "handoff" },
+  { text: "el paquete nunca me llego", expected: "handoff" },
+  { text: "tiene lactosa la torta?", expected: "complex" },
   { text: "ok gracias", expected: "silence" },
   { text: "dale 👍", expected: "silence" },
   {

@@ -46,7 +46,7 @@ describe("prefilter", () => {
   });
 
   it("never silences a question or an empty-after-trim check", () => {
-    for (const t of ["listo?", "ok?", "??"]) expect(prefilter(t, null)).toBeNull();
+    for (const t of ["listo?", "ok?", "??", "ok gracias?", "dale?"]) expect(prefilter(t, null)).toBeNull();
     expect(prefilter("", null)).toEqual({ kind: "silence" });
     expect(prefilter("  ", null)).toEqual({ kind: "silence" });
   });
