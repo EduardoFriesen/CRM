@@ -2,6 +2,7 @@ import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, describe, expect, it } from "vitest";
 import { saveAgentConfig } from "@/agent/config";
+import { saveBusinessProfile } from "@/business/profile";
 import { SAFE_HANDOFF_TEXT } from "@/bot/reply";
 import { tryAgent } from "@/bot/try-agent";
 import { dropTenants, makeContact, makeTenant, ownerSql } from "@/test/db";
@@ -33,7 +34,7 @@ describe("tryAgent", () => {
       ],
     });
     const r = await tryAgent(t.id, [{ role: "user", text: "Quiero comprar" }], { model });
-    expect(r).toEqual({ success: true, data: { reply: "¡Genial!", stage: "consulta", adminNote: null, handoff: false } });
+    expect(r).toEqual({ success: true, data: { path: "complex", reply: "¡Genial!", stage: "consulta", adminNote: null, handoff: false } });
     const stages = await ownerSql<{ stage: string }[]>`select stage from contacts where tenant_id = ${t.id}`;
     expect(stages).toEqual([{ stage: "consulta" }]);
   });
@@ -148,5 +149,55 @@ describe("tryAgent", () => {
       { model },
     );
     expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toMatch(/"type":"tool-call"[^}]*"toolName":"handoff_to_admin"/);
+  });
+
+  const failing = () =>
+    new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new Error("model must not be called");
+      },
+    });
+  const cfg = async () => {
+    const t = await makeTenant();
+    await saveAgentConfig(t.id, { agentName: "Sofi", provider: "anthropic", model: "m", apiKey: "sk-1234" }, async () => "valid");
+    await saveBusinessProfile(t.id, { hours: "Lun a vie 9 a 18" });
+    return t;
+  };
+
+  it("shows the template path", async () => {
+    const t = await cfg();
+    const r = await tryAgent(t.id, [{ role: "user", text: "a que hora abren?" }], { model: failing() });
+    expect(r).toMatchObject({ success: true, data: { path: "prefilter", adminNote: "(respondió con plantilla: hours)", handoff: false } });
+    expect(r.success && r.data.reply).not.toBe("");
+  });
+
+  it("keeps a template handoff as a dry run", async () => {
+    const t = await cfg();
+    await makeContact(t.id, { name: "Ana" });
+    const r = await tryAgent(t.id, [{ role: "user", text: "pasame el alias" }], { model: failing() });
+    expect(r).toMatchObject({ success: true, data: { path: "handoff", handoff: true, adminNote: "(el bot pasaría la charla a alguien del equipo)" } });
+    expect(await ownerSql`select 1 from escalations where tenant_id = ${t.id}`).toHaveLength(0);
+    expect(await ownerSql`select 1 from messages where tenant_id = ${t.id}`).toHaveLength(0);
+  });
+
+  it("shows silence as a note", async () => {
+    const t = await cfg();
+    const r = await tryAgent(t.id, [{ role: "user", text: "hola" }, { role: "assistant", text: "Sale $2.500." }, { role: "user", text: "ok" }], { model: failing() });
+    expect(r).toEqual({ success: true, data: { path: "silence", reply: "", stage: null, adminNote: "(el bot no respondería: mensaje trivial)", handoff: false } });
+  });
+
+  it("writes no bot events", async () => {
+    const t = await cfg();
+    await tryAgent(t.id, [{ role: "user", text: "a que hora abren?" }], { model: failing() });
+    await tryAgent(t.id, [{ role: "user", text: "hola" }, { role: "assistant", text: "Sale $2.500." }, { role: "user", text: "ok" }], { model: failing() });
+    expect(await ownerSql`select 1 from bot_events where tenant_id = ${t.id}`).toHaveLength(0);
+  });
+
+  it("reports the complex path when the main model answers", async () => {
+    const t = await cfg();
+    const model = new MockLanguageModelV4({
+      doGenerate: { content: [{ type: "text", text: "Hola" }], finishReason: { unified: "stop", raw: undefined }, usage, warnings: [] },
+    });
+    expect(await tryAgent(t.id, [{ role: "user", text: "Contame de las tortas" }], { model })).toMatchObject({ success: true, data: { path: "complex" } });
   });
 });
