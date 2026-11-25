@@ -25,7 +25,7 @@ describe("templates", () => {
   });
 
   it("no template asks for or gives stock numbers", () => {
-    for (const k of keys.filter((k) => k === "stock" || k.startsWith("price_"))) {
+    for (const k of keys.filter((k) => k.startsWith("stock_") || k.startsWith("price_"))) {
       for (const v of TEMPLATES[k]) {
         expect(v).not.toContain("{stock}");
         expect(v).not.toContain("unidades");

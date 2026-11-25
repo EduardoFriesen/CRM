@@ -49,6 +49,25 @@ describe("answerFaq", () => {
     expect(out).not.toContain("7");
   });
 
+  it("stock with several matches lists each one's availability", async () => {
+    const t = await makeTenant();
+    await add(t.id, "Pan A", "100", "0");
+    await add(t.id, "Pan B", "200", "5");
+    const out = (await answerFaq(t.id, { fn: "stock", args: { product: "pan" } })) as string;
+    const lines = out.split("\n");
+    expect(lines.find((l) => l.includes("Pan A"))).toContain("sin stock");
+    expect(lines.find((l) => l.includes("Pan B"))).not.toContain("sin stock");
+    expect(out).not.toMatch(/\d+\s*unidades|5/);
+  });
+
+  it("price of a single out-of-stock product mentions it", async () => {
+    const t = await makeTenant();
+    await add(t.id, "Pan de campo", "2500", "0");
+    const out = (await answerFaq(t.id, { fn: "price", args: { product: "pan" } })) as string;
+    expect(out).toContain("sin stock");
+    expect(out).not.toMatch(/reserv/);
+  });
+
   it("stock says sin stock when there is none", async () => {
     const t = await makeTenant();
     await add(t.id, "Pan de campo", "2500", "0");

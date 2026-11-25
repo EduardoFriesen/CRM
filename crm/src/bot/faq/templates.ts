@@ -2,7 +2,8 @@ export type TemplateKey =
   | "price_one"
   | "price_many"
   | "price_more"
-  | "stock"
+  | "stock_available"
+  | "stock_out"
   | "hours"
   | "location"
   | "payment_methods"
@@ -13,10 +14,11 @@ export type TemplateKey =
 
 // Customer-facing copy: rioplatense, short, WhatsApp style. Never stock quantities.
 export const TEMPLATES: Record<TemplateKey, string[]> = {
-  price_one: ["{name} sale {price}.", "El {name} está {price}.", "{name}: {price}. ¿Querés que te lo reserve?"],
+  price_one: ["{name} sale {price}{note}.", "{name}: {price}{note}.", "{name} está {price}{note}."],
   price_many: ["Mirá lo que tenemos:\n{list}", "Tenemos estas opciones:\n{list}"],
   price_more: ["Hay más opciones, decime cuál te interesa y te cuento.", "Tenemos más opciones; si me decís cuál buscás, te paso el detalle."],
-  stock: ["Sí, {name} está {status}.", "Por ahora {name} está {status}."],
+  stock_available: ["Sí, {name} está disponible.", "Tenemos {name} disponible."],
+  stock_out: ["Por ahora {name} está sin stock.", "Ahora mismo {name} está sin stock, perdón."],
   hours: ["Atendemos {hours}.", "Nuestro horario es {hours}."],
   location: ["Estamos en {address}.", "Nos encontrás en {address}. ¡Te esperamos!"],
   payment_methods: ["Aceptamos {payment_methods}.", "Podés pagar con {payment_methods}."],
