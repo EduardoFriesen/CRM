@@ -24,6 +24,8 @@ export default async function LearnedPage({ params }: { params: Promise<{ slug: 
   const tenant = await getCurrentTenant((await params).slug);
   const [facts, pending, shortcuts] = await Promise.all([listFacts(tenant.id), listPendingEscalations(tenant.id), recentExamples(tenant.id, 200)]);
   const now = new Date();
+  // A learned shortcut is only checkable with the question it answers.
+  const questionOf = new Map(facts.map((f) => [f.id, f.question]));
   return (
     <main className="page">
       <div className="page-head">
@@ -63,7 +65,8 @@ export default async function LearnedPage({ params }: { params: Promise<{ slug: 
               <li key={s.id}>
                 <span className="fact-q">{s.text}</span>
                 <span className="meta-note">
-                  {FN_LABELS[s.fn]} · {relativeTime(s.createdAt, now)}
+                  {FN_LABELS[s.fn]}
+                  {s.factId && questionOf.has(s.factId) ? `: ${questionOf.get(s.factId)}` : ""} · {relativeTime(s.createdAt, now)}
                 </span>
                 <DeleteExampleButton slug={tenant.slug} id={s.id} text={s.text} />
               </li>

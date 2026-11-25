@@ -129,7 +129,7 @@ describe("answerTurn", () => {
   it("in postventa the router answers order status", async () => {
     const t = await makeTenant();
     const c = await makeContact(t.id);
-    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2026-11-28', 'Av. Siempre Viva 123', 100)`;
+    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2099-11-28', 'Av. Siempre Viva 123', 100)`;
     const i = input(customer("cuando me llega?"), routerFor("order_status", {}), { stage: "postventa", contactId: c.id, pick: () => 0 });
     const r = await answerTurn(t.id, i);
     expect(r).toMatchObject({ path: "faq", fn: "order_status", text: fill("order_pending", { date: "sábado 28/11", address: "Av. Siempre Viva 123" }, () => 0) });
@@ -152,7 +152,7 @@ describe("answerTurn", () => {
   it("in consulta order_status goes to the main model", async () => {
     const t = await makeTenant();
     const c = await makeContact(t.id);
-    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2026-11-28', 'X', 100)`;
+    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2099-11-28', 'X', 100)`;
     const i = input(customer("cuando me llega?"), routerFor("order_status", {}), { contactId: c.id });
     expect(await answerTurn(t.id, i)).toMatchObject({ path: "complex" });
   });
@@ -186,7 +186,7 @@ describe("answerTurn", () => {
   it("a shortcut not allowed in the stage falls through to the router", async () => {
     const t = await makeTenant();
     const c = await makeContact(t.id);
-    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2026-11-28', 'X', 100)`;
+    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2099-11-28', 'X', 100)`;
     await saveExample(t.id, { text: "y lo mio para cuando", fn: "order_status" });
     const router = routerFor("complex", {});
     await answerTurn(t.id, input(customer("y lo mio para cuando"), router, { contactId: c.id }));
@@ -208,6 +208,14 @@ describe("answerTurn", () => {
       expect(await answerTurn(t.id, input(customer(text), routerFor("learned", { n: 1 }))), text).toMatchObject({ path: "complex" });
     }
     expect(await answerTurn(t.id, input(customer("emiten factura A?"), routerFor("learned", { n: 1 })))).toMatchObject({ path: "faq", text: "Sí, factura A." });
+  });
+
+  it("a learned pick is dropped when the question names a letter the message does not", async () => {
+    const t = await makeTenant();
+    await ownerSql`insert into business_facts (tenant_id, question, answer) values (${t.id}, '¿Hacen factura B?', 'Sí, factura B.')`;
+    for (const text of ["hacen factura A?", "hacen factura?"]) {
+      expect(await answerTurn(t.id, input(customer(text), routerFor("learned", { n: 1 }))), text).toMatchObject({ path: "complex" });
+    }
   });
 
   it("introduces itself on a template answer", async () => {

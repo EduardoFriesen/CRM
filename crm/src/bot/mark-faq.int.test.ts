@@ -33,7 +33,7 @@ describe("mark_faq tool", () => {
   it("does not save a function the stage does not allow", async () => {
     const t = await makeTenant();
     const c = await makeContact(t.id);
-    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2026-11-28', 'X', 100)`;
+    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2099-11-28', 'X', 100)`;
     await mark(t.id, c.id, { fn: "order_status" }, { stage: "consulta" });
     expect(await findExample(t.id, "che cuando estan abiertos")).toBeNull();
     await mark(t.id, c.id, { fn: "order_status" }, { stage: "postventa" });
@@ -43,11 +43,30 @@ describe("mark_faq tool", () => {
   it("maps fact n to the fact id", async () => {
     const t = await makeTenant();
     const c = await makeContact(t.id);
-    const rows = await ownerSql<{ id: string }[]>`insert into business_facts (tenant_id, question, answer) values (${t.id}, 'a', 'ra'), (${t.id}, 'b', 'rb') returning id`;
+    const rows = await ownerSql<{ id: string; question: string }[]>`insert into business_facts (tenant_id, question, answer)
+      values (${t.id}, '¿Hacen factura?', 'ra'), (${t.id}, '¿Tienen estacionamiento?', 'rb') returning id, question`;
     await mark(t.id, c.id, { fn: "learned", fact: 2 }, { facts: rows });
     expect(await findExample(t.id, "che cuando estan abiertos")).toMatchObject({ fn: "learned", factId: rows[1].id });
     await mark(t.id, c.id, { fn: "learned", fact: 3 }, { facts: rows, customerText: "otra cosa" });
     expect(await findExample(t.id, "otra cosa")).toBeNull();
+  });
+
+  it("does not save a learned mark whose question names another detail", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    const rows = await ownerSql<{ id: string; question: string }[]>`insert into business_facts (tenant_id, question, answer) values (${t.id}, '¿Hacen factura A?', 'Sí') returning id, question`;
+    await mark(t.id, c.id, { fn: "learned", fact: 1 }, { facts: rows, customerText: "hacen factura B?" });
+    expect(await findExample(t.id, "hacen factura B")).toBeNull();
+  });
+
+  it("does not save a complaint as order status", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2099-11-28', 'X', 100)`;
+    for (const text of ["mi pedido llego roto", "todavia no me llego el pedido", "me falta una bolsa"]) {
+      await mark(t.id, c.id, { fn: "order_status" }, { stage: "postventa", customerText: text });
+      expect(await findExample(t.id, text), text).toBeNull();
+    }
   });
 
   it("saves nothing in dry run", async () => {

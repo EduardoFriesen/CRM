@@ -5,6 +5,7 @@ import { withTenant } from "@/db/client";
 import { businessFacts, orders } from "@/db/schema";
 import { z } from "zod";
 import { formatPrice } from "@/lib/money";
+import { todayInBuenosAires } from "@/orders/group";
 import { plain } from "@/lib/plain";
 import { fill, type TemplateKey } from "./templates";
 import type { FaqCall, QuoteItem } from "./types";
@@ -117,7 +118,10 @@ async function answerOrder(tenantId: string, contactId: string, pick?: () => num
       .from(orders)
       .where(and(eq(orders.contactId, contactId), inArray(orders.status, ["pending", "delivered"]))),
   );
-  const [pending] = rows.filter((o) => o.status === "pending").sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate));
+  const pendings = rows.filter((o) => o.status === "pending");
+  // A late order (delivery date already past) needs a person, not a date that already went by.
+  const [pending] = pendings.filter((o) => o.deliveryDate >= todayInBuenosAires()).sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate));
+  if (pendings.length > 0 && !pending) return null;
   // A `date` column: noon UTC keeps the same calendar day in Buenos Aires.
   if (pending) return fill("order_pending", { date: formatDay(new Date(`${pending.deliveryDate}T12:00:00Z`)), address: pending.address }, pick);
   const [delivered] = rows

@@ -13,6 +13,8 @@ test.beforeAll(async () => {
   await sql`insert into escalations (tenant_id, contact_id, question, is_price, admin_message_id) values (${t.id}, ${c.id}, '¿Abren el domingo?', false, ${"E2E-" + suffix})`;
   await sql`insert into business_facts (tenant_id, question, answer) values (${t.id}, '¿Hacen envíos a Pilar?', 'Sí, los martes')`;
   await sql`insert into router_examples (tenant_id, key, text, fn) values (${t.id}, 'che cuando estan abiertos', 'Che, ¿cuándo están abiertos?', 'hours')`;
+  const [f] = await sql<{ id: string }[]>`insert into business_facts (tenant_id, question, answer) values (${t.id}, '¿Hacen factura A?', 'Sí, con tu CUIT') returning id`;
+  await sql`insert into router_examples (tenant_id, key, text, fn, fact_id) values (${t.id}, 'emiten factura a', 'emiten factura A?', 'learned', ${f.id})`;
 });
 test.afterAll(async () => {
   await sql`delete from tenants where slug in (${slug}, ${emptySlug})`;
@@ -51,6 +53,7 @@ test("lists the bot's shortcuts with their function and lets you delete one", as
   const section = page.getByRole("region", { name: /Atajos del bot/ });
   const item = section.getByRole("listitem").filter({ hasText: "Che, ¿cuándo están abiertos?" });
   await expect(item).toContainText("Horarios");
+  await expect(section.getByRole("listitem").filter({ hasText: "emiten factura A?" })).toContainText("Respuesta aprendida: ¿Hacen factura A?");
   await item.getByRole("button", { name: "Borrar atajo: Che, ¿cuándo están abiertos?" }).click();
   await expect(page.getByText("Che, ¿cuándo están abiertos?")).toHaveCount(0);
 });

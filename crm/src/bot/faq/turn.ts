@@ -4,9 +4,9 @@ import type { HistoryTurn } from "@/bot/history";
 import { classifyModelError, meter, type SkipOutcome, type TurnUsage } from "@/bot/reply";
 import type { BotEvent, BotPath } from "@/usage/events";
 import { answerFaq, type FaqAnswer } from "./answers";
-import { exampleKey, findExample, recentExamples } from "./examples";
+import { findExample, recentExamples } from "./examples";
 import { prefilter } from "./prefilter";
-import { allowedIn, customerBlock } from "./scope";
+import { allowedIn, customerBlock, namesOtherDetail } from "./scope";
 import { recentFacts } from "@/facts/facts";
 import { ROUTER_FACTS, routeMessage, type RouterContext } from "./router";
 import { fill } from "./templates";
@@ -127,19 +127,6 @@ export async function answerTurn(
   // The introduction already greets and asks what they need: a greeting or unclear message gets only that.
   const intro = fill("intro", { tenant: input.tenantName }, input.pick);
   return { ...r, text: call.fn === "unclear" || call.fn === "greeting" ? intro : `${intro}\n${answer}` };
-}
-
-// A number or a lone letter (not a Spanish one-letter word) is a detail: "factura B", "talle 42".
-const DETAIL = /^(?:\d+|[b-df-np-tv-xz])$/;
-
-// The message names a detail the learned question does not, so it asks something else.
-// ponytail: catches letters and numbers only; different words ("Tigre" vs "Pilar") still pass.
-// Upgrade: have the router quote the detail it matched, and compare that.
-function namesOtherDetail(message: string, question: string): boolean {
-  const asked = new Set(exampleKey(question).split(" "));
-  return exampleKey(message)
-    .split(" ")
-    .some((w) => DETAIL.test(w) && !asked.has(w));
 }
 
 // The router call is metered and its errors classified like the main model's, except that a

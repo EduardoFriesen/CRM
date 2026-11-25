@@ -182,11 +182,18 @@ describe("answerFaq", () => {
   it("order_status answers the nearest pending order of that contact", async () => {
     const t = await makeTenant();
     const c = await makeContact(t.id);
-    await order(t.id, c.id, "2026-12-05", "pending", "Otra 1");
-    await order(t.id, c.id, "2026-11-28");
-    await order(t.id, c.id, "2026-11-27", "cancelled", "Cancelada 9");
+    await order(t.id, c.id, "2099-12-05", "pending", "Otra 1");
+    await order(t.id, c.id, "2099-11-28");
+    await order(t.id, c.id, "2099-11-27", "cancelled", "Cancelada 9");
     const out = await answerFaq(t.id, { fn: "order_status", args: {} }, () => 0, c.id);
     expect(out).toBe(fill("order_pending", { date: "sábado 28/11", address: "Av. Siempre Viva 123" }, () => 0));
+  });
+
+  it("order_status does not announce a delivery date that already passed", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await order(t.id, c.id, "2020-01-10");
+    expect(await answerFaq(t.id, { fn: "order_status", args: {} }, () => 0, c.id)).toBeNull();
   });
 
   it("order_status falls back to the latest delivered order", async () => {
@@ -202,8 +209,8 @@ describe("answerFaq", () => {
     const t = await makeTenant();
     const c = await makeContact(t.id);
     const other = await makeContact(t.id);
-    await order(t.id, other.id, "2026-11-28");
-    await order(t.id, c.id, "2026-11-28", "cancelled");
+    await order(t.id, other.id, "2099-11-28");
+    await order(t.id, c.id, "2099-11-28", "cancelled");
     expect(await answerFaq(t.id, { fn: "order_status", args: {} }, () => 0, c.id)).toBeNull();
     expect(await answerFaq(t.id, { fn: "order_status", args: {} }, () => 0)).toBeNull();
   });

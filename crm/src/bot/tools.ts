@@ -8,7 +8,7 @@ import { contacts, escalations, type Stage } from "@/db/schema";
 import { escalationText, handoffText } from "./admin-messages";
 import { answerFaq } from "./faq/answers";
 import { LEARNABLE, saveExample } from "./faq/examples";
-import { allowedIn } from "./faq/scope";
+import { allowedIn, isComplaint, namesOtherDetail } from "./faq/scope";
 
 const MAX_PENDING_PER_CONTACT = 3;
 const FALLBACK = { ok: false, fallback: "no tengo ese dato, te lo confirma alguien del equipo" };
@@ -26,7 +26,7 @@ export type ToolOptions = {
   /** For mark_faq: the customer's messages this turn answers, the stage and the numbered learned facts. */
   customerText?: string;
   stage?: Stage;
-  facts?: { id: string }[];
+  facts?: { id: string; question: string }[];
 };
 
 async function contactInfo(tenantId: string, contactId: string) {
@@ -157,8 +157,11 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
       execute: async ({ fn, fact }) => {
         if (opts.dryRun || !opts.customerText || !opts.stage || !allowedIn(opts.stage, fn)) return { ok: true };
         try {
-          const factId = fn === "learned" ? opts.facts?.[(fact ?? 0) - 1]?.id : undefined;
-          if (fn === "learned" && !factId) return { ok: true };
+          // Same guards as the router: a shortcut is answered with no model at all.
+          const learned = fn === "learned" ? opts.facts?.[(fact ?? 0) - 1] : undefined;
+          if (fn === "learned" && (!learned || namesOtherDetail(opts.customerText, learned.question))) return { ok: true };
+          if (fn === "order_status" && isComplaint(opts.customerText)) return { ok: true };
+          const factId = learned?.id;
           const answer = await answerFaq(tenantId, { fn, args: factId ? { factId } : {} }, undefined, contactId);
           if (answer !== null) await saveExample(tenantId, { text: opts.customerText, fn, factId });
         } catch (e) {

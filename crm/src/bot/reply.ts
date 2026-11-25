@@ -58,6 +58,11 @@ export type TurnUsage = { inputTokens: number; outputTokens: number; cachedToken
 
 // The single place the tenant's model is called: every step and its tokens are metered,
 // and a failed call still counts as one request (providers count it too).
+const markedWithReply = ({ steps }: { steps: { text: string; toolCalls: { toolName: string }[] }[] }) => {
+  const last = steps.at(-1);
+  return !!last && last.text.trim() !== "" && last.toolCalls.length > 0 && last.toolCalls.every((c) => c.toolName === "mark_faq");
+};
+
 export async function generateAgentText(
   tenantId: string,
   model: LanguageModel,
@@ -73,7 +78,9 @@ export async function generateAgentText(
       instructions: args.system,
       messages: args.messages,
       tools: args.tools,
-      stopWhen: isStepCount(3),
+      // A reply written next to mark_faq is final: another step would only cost a call and
+      // replace it (result.text is the last step's text).
+      stopWhen: [isStepCount(3), markedWithReply],
       maxRetries: 0,
       onStepFinish: (step) => {
         const delta = {
