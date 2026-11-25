@@ -37,6 +37,14 @@ describe("prefilter", () => {
     expect(prefilter("como pago con mercado pago?", null)).toMatchObject({ fn: "handoff" });
   });
 
+  it("a customer paying or about to pay is a handoff", () => {
+    for (const t of ["listo ya te pague por mercado pago", "quiero pagar con mercadopago", "pago en efectivo", "lo pago en efectivo cuando lo retiro", "ya transferi", "te mando el comprobante"]) {
+      expect(prefilter(t, null), t).toMatchObject({ fn: "handoff" });
+    }
+    expect(prefilter("aceptan mercado pago?", null)).toMatchObject({ fn: "payment_methods" });
+    expect(prefilter("medios de pago?", null)).toMatchObject({ fn: "payment_methods" });
+  });
+
   it("does not misfire on unrelated words", () => {
     expect(prefilter("quiero un aliasado", null)).toBeNull();
   });
