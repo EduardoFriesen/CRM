@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { cancelOrder, createOrder, deliverOrder, listOrders } from "@/orders/orders";
+import { cancelOrder, createOrder, deliverOrder, listOrders, updateOrder } from "@/orders/orders";
 import { dropTenants, makeContact, makeTenant, ownerSql } from "@/test/db";
 
 afterAll(async () => {
@@ -154,5 +154,92 @@ describe("deliver and cancel", () => {
     const c = await buyer(b.id);
     await createOrder(b.id, input(c, [{ productId: pan, quantity: 1 }]));
     expect(await listOrders(a.id)).toEqual([]);
+  });
+});
+
+describe("updateOrder", () => {
+  const edit = (items: { productId: string; quantity: number }[], over: object = {}) => {
+    const { contactId: _, ...rest } = input("", items, over);
+    return rest;
+  };
+  const setup = async () => {
+    const t = await makeTenant();
+    const pan = await product(t.id, "Pan de campo", 2500, 10);
+    const med = await product(t.id, "Medialunas", 4800, 5);
+    const c = await buyer(t.id);
+    const r = await createOrder(t.id, input(c, [{ productId: pan, quantity: 3 }]));
+    if (!r.success) throw new Error("setup failed");
+    return { t, pan, med, order: r.data };
+  };
+
+  it("changes date, address and notes", async () => {
+    const { t, pan, order } = await setup();
+    const r = await updateOrder(t.id, order.id, edit([{ productId: pan, quantity: 3 }], { deliveryDate: baDate(5), address: "Otra 1", notes: "timbre 2" }));
+    expect(r).toMatchObject({ success: true, data: { id: order.id, deliveryDate: baDate(5), address: "Otra 1", notes: "timbre 2", total: "7500.00" } });
+    expect(await stockOf(pan)).toBe(7);
+  });
+
+  it("lowering a quantity gives the difference back to the stock", async () => {
+    const { t, pan, order } = await setup();
+    expect(await updateOrder(t.id, order.id, edit([{ productId: pan, quantity: 1 }]))).toMatchObject({ success: true, data: { total: "2500.00" } });
+    expect(await stockOf(pan)).toBe(9);
+  });
+
+  it("switching products gives back the old one and takes the new one", async () => {
+    const { t, pan, med, order } = await setup();
+    const r = await updateOrder(t.id, order.id, edit([{ productId: med, quantity: 2 }]));
+    expect(r).toMatchObject({ success: true, data: { total: "9600.00", items: [{ productName: "Medialunas", quantity: 2 }] } });
+    expect([await stockOf(pan), await stockOf(med)]).toEqual([10, 3]);
+  });
+
+  it("refuses when the stock is short and leaves the order and the stock as they were", async () => {
+    const { t, pan, med, order } = await setup();
+    const r = await updateOrder(t.id, order.id, edit([{ productId: pan, quantity: 2 }, { productId: med, quantity: 6 }]));
+    expect(r).toMatchObject({ success: false, error: { code: "OUT_OF_STOCK", details: { productId: med } } });
+    expect([await stockOf(pan), await stockOf(med)]).toEqual([7, 5]);
+    const [after] = await listOrders(t.id);
+    expect(after).toMatchObject({ total: "7500.00", items: [{ productName: "Pan de campo", quantity: 3 }] });
+  });
+
+  it("the stock the order already holds counts as available", async () => {
+    const { t, pan, order } = await setup();
+    expect(await updateOrder(t.id, order.id, edit([{ productId: pan, quantity: 10 }]))).toMatchObject({ success: true });
+    expect(await stockOf(pan)).toBe(0);
+  });
+
+  it("does not touch products without stock control", async () => {
+    const t = await makeTenant();
+    const torta = await product(t.id, "Torta", 18000, null);
+    const c = await buyer(t.id);
+    const r0 = await createOrder(t.id, input(c, [{ productId: torta, quantity: 1 }]));
+    if (!r0.success) throw new Error("setup failed");
+    expect(await updateOrder(t.id, r0.data.id, edit([{ productId: torta, quantity: 4 }]))).toMatchObject({ success: true, data: { total: "72000.00" } });
+    expect(await stockOf(torta)).toBeNull();
+  });
+
+  it("only edits pending orders", async () => {
+    const { t, pan, order } = await setup();
+    await deliverOrder(t.id, order.id);
+    expect(await updateOrder(t.id, order.id, edit([{ productId: pan, quantity: 1 }]))).toEqual({
+      success: false,
+      error: { code: "VALIDATION", message: "Ese pedido ya no está pendiente" },
+    });
+    expect(await stockOf(pan)).toBe(7);
+  });
+
+  it("validates the input and the date like creating", async () => {
+    const { t, pan, order } = await setup();
+    expect(await updateOrder(t.id, order.id, edit([]))).toMatchObject({ success: false, error: { code: "VALIDATION" } });
+    expect(await updateOrder(t.id, order.id, edit([{ productId: pan, quantity: 1 }], { deliveryDate: baDate(-1) }))).toMatchObject({
+      success: false,
+      error: { code: "VALIDATION", details: { deliveryDate: ["La fecha de entrega no puede ser anterior a hoy"] } },
+    });
+  });
+
+  it("another tenant's order or a malformed id is NOT_FOUND", async () => {
+    const { pan, order } = await setup();
+    const other = await makeTenant();
+    expect(await updateOrder(other.id, order.id, edit([{ productId: pan, quantity: 1 }]))).toMatchObject({ success: false, error: { code: "NOT_FOUND" } });
+    expect(await updateOrder(other.id, "nope", edit([{ productId: pan, quantity: 1 }]))).toMatchObject({ success: false, error: { code: "NOT_FOUND" } });
   });
 });
