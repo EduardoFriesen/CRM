@@ -17,6 +17,7 @@ import { asksForSensitiveData } from "./sensitive-guard";
 import { handOff, makeTools, requestAttention } from "./tools";
 import { customerBlock } from "./faq/scope";
 import { answerTurn, emptyTurn, turnEvent, type TurnResult } from "./faq/turn";
+import { fill } from "./faq/templates";
 import { recordBotEvent } from "@/usage/events";
 
 const HISTORY = 6;
@@ -99,6 +100,13 @@ export async function generateAgentText(
     await meter(tenantId, { requests: 1 });
     throw e;
   }
+}
+
+// Once the admin was asked, the customer hears only that: models tend to answer anyway
+// (an invented "no hacemos descuentos") next to the question, and the admin's answer follows.
+export function withAskedReply<T extends { text: string }>(reply: T | SkipOutcome, asked: boolean, intro: { introduce: boolean; tenant: string }) {
+  if (typeof reply === "string" || !asked) return reply;
+  return { ...reply, text: intro.introduce ? fill("asked_intro", { tenant: intro.tenant }) : fill("asked", {}) };
 }
 
 export function errorCode(e: unknown): string {
@@ -251,6 +259,7 @@ export async function runConversation(
   const notify = (t: string) => notifyAdmin(tenantId, t, { send });
 
   const runComplex = async () => {
+    let asked = false;
     const facts = await recentFacts(tenantId);
     const system = buildSystemPrompt({
       ...rt,
@@ -262,7 +271,7 @@ export async function runConversation(
       facts,
       stage,
     });
-    return generateOrRecord(tenantId, rt, deps.model, {
+    const reply = await generateOrRecord(tenantId, rt, deps.model, {
       system,
       messages: toModelMessages(conv.recent.map(toTurn), { toolCalls: true }),
       tools: makeTools(tenantId, contactId, {
@@ -271,11 +280,13 @@ export async function runConversation(
         scheduleReminder: deps.scheduleReminder ?? ((id) => enqueueReminder(tenantId, id)),
         pauseHours: rt.pauseHours,
         onHandoff: () => (handedOff = true),
+        onAsked: () => (asked = true),
         customerText: customerBlock(conv.recent.map(toTurn)),
         stage,
         facts,
       }),
     });
+    return withAskedReply(reply, asked, { introduce, tenant: conv.tenantName });
   };
 
   let routerModel: LanguageModel | null;

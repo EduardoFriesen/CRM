@@ -16,7 +16,9 @@ export type TemplateKey =
   | "order_delivered"
   | "quote"
   | "quote_short"
-  | "intro";
+  | "intro"
+  | "asked"
+  | "asked_intro";
 
 // Customer-facing copy: rioplatense, short, WhatsApp style. Never stock quantities.
 export const TEMPLATES: Record<TemplateKey, string[]> = {
@@ -50,6 +52,9 @@ export const TEMPLATES: Record<TemplateKey, string[]> = {
   order_delivered: ["Tu pedido se entregó el {date}.", "Tu pedido quedó entregado el {date}."],
   farewell: ["¡Gracias por escribirnos! Cualquier cosa, acá estamos.", "¡Un gusto! Cuando necesites, escribinos."],
   greeting: ["¡Hola! ¿En qué te puedo ayudar?", "¡Buenas! Contame, ¿qué necesitás?", "¡Hola! ¿Qué estás buscando?"],
+  // After asking the admin: no answer of its own, the admin's comes later.
+  asked: ["Lo consulto y te aviso.", "Dejame consultarlo y te aviso.", "Ya lo consulto y te escribo."],
+  asked_intro: ["¡Hola! Soy el asistente de {tenant}. Lo consulto y te aviso.", "¡Buenas! Te escribe el asistente de {tenant}. Dejame consultarlo y te aviso."],
   intro: ["¡Hola! Soy el asistente de {tenant}. ¿En qué te puedo ayudar?", "¡Buenas! Te escribe el asistente de {tenant}. Contame, ¿qué necesitás?"],
 };
 

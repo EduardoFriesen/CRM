@@ -19,6 +19,8 @@ export type ToolOptions = {
   onAdmin?: (kind: "ask" | "handoff" | "attention", text: string) => void;
   /** Called once handoff_to_admin has run (also in dry run), so the reply is stored as a handoff. */
   onHandoff?: () => void;
+  /** Called once ask_admin reached the admin (also in dry run): the reply becomes "lo consulto". */
+  onAsked?: () => void;
   /** Sends a WhatsApp message to the tenant's admin; returns its id. */
   notify?: (text: string) => Promise<{ id: string }>;
   scheduleReminder?: (escalationId: string) => Promise<void>;
@@ -133,6 +135,7 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
       execute: async ({ question, is_price, general }) => {
         if (opts.dryRun) {
           opts.onAdmin?.("ask", question);
+          opts.onAsked?.();
           return { ok: true };
         }
         if (!opts.notify) return FALLBACK;
@@ -164,6 +167,7 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
         );
         // A missing reminder must not undo a question the admin already received.
         await opts.scheduleReminder?.(esc.id).catch(() => recordAgentError(tenantId, "REMINDER_SCHEDULE"));
+        opts.onAsked?.();
         return { ok: true };
       },
     }),

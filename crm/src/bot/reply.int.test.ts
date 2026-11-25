@@ -1,3 +1,4 @@
+import { TEMPLATES } from "@/bot/faq/templates";
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -404,11 +405,41 @@ describe("runConversation", () => {
       const scheduleReminder = vi.fn(async () => {});
       expect(await runConversation(t.id, c.id, { model, send, scheduleReminder })).toBe("sent");
       expect(send).toHaveBeenCalledWith(t.slug, ADMIN_JID, "Consulta de Ana (+5491122334455): ¿Hacen envíos a Pilar? Respondé citando este mensaje.");
-      expect(send).toHaveBeenCalledWith(t.slug, c.jid, "Lo consulto y te aviso.");
+      expect(send).toHaveBeenCalledWith(t.slug, c.jid, expect.stringMatching(/asistente de .*te aviso\.$/));
       const [esc] = await ownerSql<{ id: string; status: string; admin_message_id: string; is_price: boolean; is_general: boolean }[]>`
         select id, status, admin_message_id, is_price, is_general from escalations where contact_id = ${c.id}`;
       expect(esc).toMatchObject({ status: "pending", admin_message_id: "ADM-1", is_price: false, is_general: true });
       expect(scheduleReminder).toHaveBeenCalledWith(esc.id);
+    });
+
+    it("once the admin is asked, only tells the customer it will check, whatever the model wrote", async () => {
+      const { t, c } = await setup({ discloseAi: false });
+      await say(t.id, c.id, "customer", "¿Hay descuento por cantidad?");
+      const model = new MockLanguageModelV4({
+        doGenerate: [
+          toolCall("ask_admin", { question: "¿Hay descuento por cantidad?", is_price: true, general: true }),
+          text("No hacemos descuentos por cantidad, pero igual lo consulto."),
+        ],
+      });
+      const send = vi.fn(async (...args: string[]) => ({ id: `BOT-${args.length}-${Math.random()}` }));
+      await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
+      const toCustomer = send.mock.calls.filter(([, jid]) => jid === c.jid).map(([, , body]) => body);
+      expect(toCustomer).toHaveLength(1);
+      expect(TEMPLATES.asked).toContain(toCustomer[0]);
+    });
+
+    it("the check-back reply still introduces the bot on a first message", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "¿Hay descuento por cantidad?");
+      const model = new MockLanguageModelV4({
+        doGenerate: [toolCall("ask_admin", { question: "¿Descuento?", is_price: true, general: true }), text("No hacemos descuentos.")],
+      });
+      const send = vi.fn(async (...args: string[]) => ({ id: `BOT-${args.length}-${Math.random()}` }));
+      await runConversation(t.id, c.id, { model, send, scheduleReminder: async () => {} });
+      const body = send.mock.calls.find(([, jid]) => jid === c.jid)?.[2] ?? "";
+      expect(body).toMatch(/asistente/);
+      expect(body).toMatch(/consult/i);
+      expect(body).not.toMatch(/descuento/);
     });
 
     it("stops asking after 3 pending questions for the same contact", async () => {

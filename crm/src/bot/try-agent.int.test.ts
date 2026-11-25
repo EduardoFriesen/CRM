@@ -69,11 +69,13 @@ describe("tryAgent", () => {
           usage,
           warnings: [],
         },
-        { content: [{ type: "text", text: "Lo consulto" }], finishReason: { unified: "stop", raw: undefined }, usage, warnings: [] },
+        { content: [{ type: "text", text: "No abrimos los domingos, igual lo consulto" }], finishReason: { unified: "stop", raw: undefined }, usage, warnings: [] },
       ],
     });
     const r = await tryAgent(t.id, [{ role: "user", text: "¿Abren el domingo?" }], { model });
     expect(r).toMatchObject({ success: true, data: { adminNote: "(el bot consultaría al admin: ¿Abren el domingo?)" } });
+    expect(r.success && r.data.reply).toMatch(/consult/i);
+    expect(r.success && r.data.reply).not.toMatch(/No abrimos/);
     expect(await ownerSql`select 1 from escalations where tenant_id = ${t.id}`).toHaveLength(0);
   });
 

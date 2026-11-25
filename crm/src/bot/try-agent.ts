@@ -13,7 +13,7 @@ import type { BotPath } from "@/usage/events";
 import { answerTurn } from "./faq/turn";
 import { toModelMessages } from "./history";
 import { buildSystemPrompt } from "./prompt";
-import { errorCode, generateAgentText, SAFE_HANDOFF_TEXT, truncateForWhatsApp } from "./reply";
+import { errorCode, generateAgentText, SAFE_HANDOFF_TEXT, truncateForWhatsApp, withAskedReply } from "./reply";
 import { asksForSensitiveData } from "./sensitive-guard";
 import { makeTools } from "./tools";
 
@@ -58,8 +58,9 @@ export async function tryAgent(
       tenantName: tenant?.name ?? "",
       routerModel,
       // Same model call as WhatsApp, but tools are dry runs.
-      runComplex: async () =>
-        generateAgentText(tenantId, model, {
+      runComplex: async () => {
+        let asked = false;
+        const reply = await generateAgentText(tenantId, model, {
           system,
           messages: toModelMessages(parsed.data, { toolCalls: true }),
           tools: makeTools(tenantId, "", {
@@ -68,8 +69,11 @@ export async function tryAgent(
             onHandoff: () => (handoff = true),
             onAdmin: (kind, text) =>
               (adminNote = kind === "ask" ? `(el bot consultaría al admin: ${text})` : kind === "attention" ? attentionNote(text) : HANDOFF_NOTE),
+            onAsked: () => (asked = true),
           }),
-        }),
+        });
+        return withAskedReply(reply, asked, { introduce: rt.discloseAi && parsed.data.length === 1, tenant: tenant?.name ?? "" });
+      },
       // A template handoff stays a dry run: no escalation, no pause, no notification.
       doHandoff: async () => {
         handoff = true;
