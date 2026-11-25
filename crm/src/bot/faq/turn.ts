@@ -18,14 +18,16 @@ export type TurnResult = {
   routerModel: string | null;
   usage: TurnUsage;
   routerUsage: TurnUsage;
+  /** Set when a model call was skipped (no reply); the rest says how far the turn got. */
+  skip?: SkipOutcome;
 };
 
 const zero = (): TurnUsage => ({ inputTokens: 0, outputTokens: 0, cachedTokens: 0 });
 const modelName = (m: LanguageModel) => (typeof m === "string" ? m : m.modelId);
 
-/** A turn that reached `path` and produced nothing (relay, or a model call that was skipped). */
-export function emptyTurn(path: BotPath, routerModel: LanguageModel | null = null): TurnResult {
-  return { path, fn: null, text: null, handoff: false, routerModel: routerModel && modelName(routerModel), usage: zero(), routerUsage: zero() };
+/** A turn that reached `path` and has produced nothing yet. */
+export function emptyTurn(path: BotPath): TurnResult {
+  return { path, fn: null, text: null, handoff: false, routerModel: null, usage: zero(), routerUsage: zero() };
 }
 
 /** One metrics row per turn: both calls' tokens summed, the router's also apart. Never message text. */
@@ -62,11 +64,11 @@ export async function answerTurn(
     doHandoff: (reason: string) => Promise<void>;
     pick?: () => number;
   },
-): Promise<TurnResult | SkipOutcome> {
+): Promise<TurnResult> {
   const base = emptyTurn("complex");
-  const complex = async (r: TurnResult): Promise<TurnResult | SkipOutcome> => {
+  const complex = async (r: TurnResult): Promise<TurnResult> => {
     const reply = await input.runComplex();
-    return typeof reply === "string" ? reply : { ...r, path: "complex", text: reply.text, usage: reply.usage };
+    return typeof reply === "string" ? { ...r, path: "complex", skip: reply } : { ...r, path: "complex", text: reply.text, usage: reply.usage };
   };
   if (input.stage !== "consulta") return complex(base);
 
@@ -83,8 +85,9 @@ export async function answerTurn(
   } else {
     if (!input.routerModel) return complex(base);
     const routed = await route(tenantId, input.routerModel, input.turns);
-    if (typeof routed === "string") return routed;
-    r = { ...base, path: "faq", fn: routed.call.fn, routerModel: modelName(input.routerModel), routerUsage: routed.usage };
+    const routerModel = modelName(input.routerModel);
+    if (typeof routed === "string") return { ...base, path: "faq", routerModel, skip: routed };
+    r = { ...base, path: "faq", fn: routed.call.fn, routerModel, routerUsage: routed.usage };
     if (routed.call.fn === "complex") return complex({ ...r, fn: null });
     call = routed.call;
   }

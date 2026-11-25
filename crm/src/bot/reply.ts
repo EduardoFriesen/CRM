@@ -240,11 +240,9 @@ export async function runConversation(
   const introduce = rt.discloseAi && (!conv.lastBotAt || now.getTime() - conv.lastBotAt.getTime() > INTRO_GAP_MS);
   const stage = conv.contact.stage;
   let handedOff = false;
-  let complexRan = false;
   const notify = (t: string) => notifyAdmin(tenantId, t, { send });
 
   const runComplex = async () => {
-    complexRan = true;
     const system = buildSystemPrompt({
       ...rt,
       business: await getBusinessProfile(tenantId),
@@ -290,8 +288,7 @@ export async function runConversation(
   // One metrics row per turn that got past the entry guards.
   const record = (outcome: ConversationOutcome, r: TurnResult) =>
     recordBotEvent(tenantId, turnEvent(contactId, outcome, r, r.path === "complex" ? rt.model : null, Date.now() - started)).then(() => outcome);
-  // A skipped turn stopped in the main model if it ran, else in the router.
-  if (isSkip(turn)) return record(turn, emptyTurn(complexRan ? "complex" : "faq", stage === "consulta" ? routerModel : null));
+  if (turn.skip) return record(turn.skip, turn);
   if (turn.text === null) return record("skipped:trivial", turn);
 
   let text = truncateForWhatsApp(turn.text.trim());

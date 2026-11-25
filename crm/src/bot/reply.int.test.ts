@@ -641,6 +641,19 @@ describe("runConversation", () => {
       expect(await events(t.id)).toMatchObject([{ path: "complex", outcome: "sent" }]);
     });
 
+    it("a skipped main call keeps the router's work in its event", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "me contas como es el tema de los pedidos grandes");
+      const model = new MockLanguageModelV4({
+        doGenerate: async () => {
+          throw new APICallError({ message: "quota", url: "https://x", requestBodyValues: {}, statusCode: 429, responseBody: "PerDay" });
+        },
+      });
+      expect(await runConversation(t.id, c.id, { model, routerModel: router("complex", {}), send: sendOk() })).toBe("skipped:quota");
+      const [e] = await ownerSql`select path, outcome, router_model, router_input_tokens from bot_events where tenant_id = ${t.id}`;
+      expect(e).toEqual({ path: "complex", outcome: "skipped:quota", router_model: "mock-model-id", router_input_tokens: 1 });
+    });
+
     it("stops on an exhausted quota in the router without calling the main model", async () => {
       const { t, c } = await setup();
       await say(t.id, c.id, "customer", "che cuanto sale el pan");

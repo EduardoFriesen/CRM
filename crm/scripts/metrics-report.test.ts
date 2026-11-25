@@ -38,10 +38,19 @@ describe("summarize", () => {
 
   it("prices router tokens with the router model", () => {
     const rep = summarize(
-      [row({ path: "faq", model: null, router_model: "r", router_input_tokens: 1_000_000, router_output_tokens: 1_000_000 })],
+      [row({ path: "faq", model: null, router_model: "r", input_tokens: 1_000_000, output_tokens: 1_000_000, router_input_tokens: 1_000_000, router_output_tokens: 1_000_000 })],
       prices,
     );
     expect(rep.byPath.faq.costUsd).toBeCloseTo(0.3);
+  });
+
+  it("prices the main model without the router tokens already counted in input/output", () => {
+    // 1M main + 1M router input: 1M * 1 + 1M * 0.1 = 1.1
+    const rep = summarize(
+      [row({ model: "m", router_model: "r", input_tokens: 2_000_000, router_input_tokens: 1_000_000 })],
+      prices,
+    );
+    expect(rep.byPath.complex.costUsd).toBeCloseTo(1.1);
   });
 
   it("lists models missing from prices and excludes their cost", () => {

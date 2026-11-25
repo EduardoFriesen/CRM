@@ -131,4 +131,38 @@ describe("answerTurn", () => {
     expect(await answerTurn(t.id, i)).toMatchObject({ path: "complex", fn: null, text: "respuesta compleja", routerModel: "mock-model-id" });
     expect(i.runComplex).toHaveBeenCalledOnce();
   });
+  it("a skipped main call keeps what the router did", async () => {
+    const t = await makeTenant();
+    const i = input(customer("me contas como es el tema de los pedidos grandes para eventos"), routerFor("complex", {}), {
+      runComplex: vi.fn(async () => "skipped:quota" as const),
+    });
+    expect(await answerTurn(t.id, i)).toMatchObject({
+      path: "complex",
+      skip: "skipped:quota",
+      routerModel: "mock-model-id",
+      routerUsage: { inputTokens: 7, outputTokens: 2, cachedTokens: 0 },
+    });
+  });
+
+  it("a skipped turn names no router model when the router was not called", async () => {
+    const t = await makeTenant();
+    const router = routerFor("hours", {});
+    // A prefilter rule with no data behind it goes to the full bot without the router.
+    const i = input(customer("a que hora abren?"), router, { runComplex: vi.fn(async () => "skipped:model-error" as const) });
+    expect(await answerTurn(t.id, i)).toMatchObject({ path: "complex", fn: "hours", skip: "skipped:model-error", routerModel: null });
+    expect(router.doGenerateCalls).toHaveLength(0);
+  });
+
+  it("a skipped router call is recorded on the faq path", async () => {
+    const t = await makeTenant();
+    const { APICallError } = await import("ai");
+    const router = new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new APICallError({ message: "quota", url: "https://x", requestBodyValues: {}, statusCode: 429, responseBody: "PerDay" });
+      },
+    });
+    const i = input(customer("me contas como es el tema de los pedidos grandes para eventos"), router);
+    expect(await answerTurn(t.id, i)).toMatchObject({ path: "faq", skip: "skipped:quota", routerModel: "mock-model-id", text: null });
+    expect(i.runComplex).not.toHaveBeenCalled();
+  });
 });

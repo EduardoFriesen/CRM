@@ -44,7 +44,8 @@ export function summarize(rows: EventRow[], prices: Prices): Report {
     s.input += r.input_tokens;
     s.output += r.output_tokens;
     s.cached += r.cached_tokens;
-    s.cost += price(r.model, r.input_tokens, r.output_tokens, r.cached_tokens);
+    // input/output already include the router's tokens: the main model is priced without them.
+    s.cost += price(r.model, r.input_tokens - r.router_input_tokens, r.output_tokens - r.router_output_tokens, r.cached_tokens);
     s.cost += price(r.router_model, r.router_input_tokens, r.router_output_tokens, 0);
   }
 

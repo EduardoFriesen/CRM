@@ -73,9 +73,9 @@ export async function tryAgent(
         adminNote = HANDOFF_NOTE;
       },
     });
-    if (typeof turn === "string") {
-      if (turn === "skipped:key-invalid") return fail("KEY_INVALID", "El proveedor rechazó la API key");
-      if (turn === "skipped:quota") return fail("QUOTA_EXCEEDED", describeAgentError("QUOTA_EXCEEDED"));
+    if (turn.skip) {
+      if (turn.skip === "skipped:key-invalid") return fail("KEY_INVALID", "El proveedor rechazó la API key");
+      if (turn.skip === "skipped:quota") return fail("QUOTA_EXCEEDED", describeAgentError("QUOTA_EXCEEDED"));
       return fail("MODEL_ERROR", "El modelo no respondió. Probá de nuevo en unos segundos.");
     }
     if (turn.text === null) return ok({ path: turn.path, reply: "", stage, adminNote: "(el bot no respondería: mensaje trivial)", handoff: false });
