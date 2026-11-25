@@ -1,5 +1,6 @@
 import { plain } from "@/lib/plain";
-import { GREETING, NO_RULE, RULES, TRIVIAL } from "./rules";
+import { FAREWELL, GREETING, NO_RULE, RULES, TRIVIAL } from "./rules";
+import { TEMPLATES } from "./templates";
 import type { Decision } from "./types";
 
 export const MAX_RULE_WORDS = 8;
@@ -13,6 +14,11 @@ export function prefilter(text: string, lastBotText: string | null): Decision | 
 
   const lines = p.split("\n").filter((line) => line.trim());
   if (lines.length > 0 && lines.every((line) => GREETING.test(line))) return { kind: "faq", fn: "greeting", args: {} };
+  if (lines.length > 0 && lines.every((line) => FAREWELL.test(line))) {
+    // The bot already said goodbye: a second "chau" needs no answer.
+    const botSaidBye = lastBotText !== null && TEMPLATES.farewell.includes(lastBotText.trim());
+    return botSaidBye ? { kind: "silence" } : { kind: "faq", fn: "farewell", args: {} };
+  }
 
   if (p.split(/\s+/).length > MAX_RULE_WORDS) return null;
   const rule = RULES.find((r) => r.pattern.test(p));

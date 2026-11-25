@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { prefilter } from "./prefilter";
+import { TEMPLATES } from "./templates";
 
 describe("prefilter", () => {
   it("silences trivial messages", () => {
@@ -59,6 +60,21 @@ describe("prefilter", () => {
     for (const t of ["hola, cuanto sale el kikuyo?", "hola\nme interesa", "buenas, hacen envios?", "que tal el kikuyo"]) {
       expect(prefilter(t, null), t).not.toMatchObject({ fn: "greeting" });
     }
+  });
+
+  it("answers a bare farewell without the router", () => {
+    for (const t of ["chau", "Chau!!", "gracias, chau", "hasta luego", "nos vemos 👋", "adiós", "saludos", "ok dale, hasta mañana"]) {
+      expect(prefilter(t, null), t).toEqual({ kind: "faq", fn: "farewell", args: {} });
+    }
+    expect(prefilter("buenas noches", null)).toMatchObject({ fn: "greeting" });
+  });
+
+  it("a second farewell in a row is silenced", () => {
+    for (const v of TEMPLATES.farewell) expect(prefilter("chau", v)).toEqual({ kind: "silence" });
+  });
+
+  it("a farewell with a question is not a bare farewell", () => {
+    expect(prefilter("chau, mañana abren?", null)).not.toMatchObject({ fn: "farewell" });
   });
 
   it("does not misfire on unrelated words", () => {

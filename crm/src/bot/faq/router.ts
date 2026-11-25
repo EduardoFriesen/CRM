@@ -27,6 +27,7 @@ const SCHEMAS = {
   }),
   catalog: none,
   greeting: none,
+  farewell: none,
   unclear: none,
   complex: none,
 } as const;
@@ -42,6 +43,7 @@ const DESCRIPTIONS: Record<keyof typeof SCHEMAS, string> = {
   quote: "The customer asks the total for a quantity of one or more products, or says they want a quantity of a product.",
   catalog: "The customer asks to see the catalog, the price list or what products you sell (not one specific product).",
   greeting: "The message is only a greeting, with no question or request.",
+  farewell: "The message is only a goodbye, with no question or request.",
   unclear: "The message is too vague to tell what the customer wants.",
   complex: "Anything else that needs a real conversation.",
 };
@@ -61,6 +63,7 @@ Elegí exactamente una función según el ÚLTIMO mensaje del cliente; el contex
 - quote: pide cuánto sale una cantidad de uno o más productos, o dice que quiere una cantidad ("quiero 300 m2 de kikuyo", "quiero comprar 2 panes"). Indicá cada producto y su cantidad como número.
 - catalog: pide ver el catálogo, la lista de precios o qué productos venden, sin nombrar uno.
 - greeting: el mensaje es SOLO un saludo (hola, buenas, cómo andan). Si además dice algo más, aunque sea vago ("hola, me interesa"), no es greeting.
+- farewell: el mensaje es SOLO una despedida (chau, hasta luego). Si además pregunta o pide algo, no es farewell.
 - handoff: quiere comprar sin decir cantidad, pagar, reservar, hablar con una persona o hacer un reclamo (indicá el motivo).
 - unclear: mensaje demasiado vago para saber qué quiere.
 - complex: cualquier otra cosa que requiera una conversación.

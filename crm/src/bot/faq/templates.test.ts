@@ -41,6 +41,10 @@ describe("templates", () => {
     for (const v of TEMPLATES.quote_short) expect(v).not.toContain("{");
   });
 
+  it("farewell thanks the customer", () => {
+    expect(TEMPLATES.farewell).toEqual(["¡Gracias por escribirnos! Cualquier cosa, acá estamos.", "¡Un gusto! Cuando necesites, escribinos."]);
+  });
+
   it("greeting says hello and asks what they need", () => {
     for (const v of TEMPLATES.greeting) expect(v).toMatch(/^¡(hola|buenas)/i);
   });

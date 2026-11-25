@@ -23,6 +23,7 @@ export async function answerFaq(tenantId: string, call: FaqCall, pick?: () => nu
   switch (call.fn) {
     case "unclear":
     case "greeting":
+    case "farewell":
     case "handoff":
       return fill(call.fn, {}, pick);
     case "price":

@@ -11,6 +11,14 @@ export const GREETING = new RegExp(
   "u",
 );
 
+// One line of `plain` text that is only a goodbye: at least one farewell word, courtesies allowed.
+const BYE = "chau|chao|adios|hasta luego|hasta manana|nos vemos|saludos";
+const COURTESY = "muchas gracias|gracias|ok|oka|dale|listo|bueno";
+export const FAREWELL = new RegExp(
+  `^${SEP}(?:(?:${COURTESY})${SEP})*(?:${BYE})${SEP}(?:(?:${BYE}|${COURTESY})${SEP})*$`,
+  "u",
+);
+
 // Order matters: paying (asking how, saying they will or did) must be a handoff before
 // "mercado pago" or "efectivo" reads as payment info.
 export const RULES: { pattern: RegExp; fn: FaqName }[] = [

@@ -176,7 +176,7 @@ describe("answerFaq", () => {
 
   it("unclear, greeting and handoff always answer", async () => {
     const t = await makeTenant();
-    for (const fn of ["unclear", "greeting", "handoff"] as const) {
+    for (const fn of ["unclear", "greeting", "farewell", "handoff"] as const) {
       const out = await answerFaq(t.id, { fn, args: {} });
       expect(out).toBeTruthy();
       expect(out).not.toContain("{");

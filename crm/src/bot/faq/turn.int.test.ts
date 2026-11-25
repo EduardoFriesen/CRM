@@ -145,6 +145,12 @@ describe("answerTurn", () => {
     expect(later).toMatchObject({ path: "prefilter", fn: "greeting", text: fill("greeting", {}, () => 0) });
   });
 
+  it("a farewell on first contact sends only the farewell, no introduction", async () => {
+    const t = await makeTenant();
+    const r = await answerTurn(t.id, input(customer("chau"), null, { introduce: true, pick: () => 0 }));
+    expect(r).toMatchObject({ path: "prefilter", fn: "farewell", text: fill("farewell", {}, () => 0) });
+  });
+
   it("classifies the customer block after the last bot turn, and no router means complex", async () => {
     const t = await makeTenant();
     await saveBusinessProfile(t.id, { hours: "de 8 a 20" });

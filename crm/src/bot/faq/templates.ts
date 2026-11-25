@@ -11,6 +11,7 @@ export type TemplateKey =
   | "handoff"
   | "unclear"
   | "greeting"
+  | "farewell"
   | "quote"
   | "quote_short"
   | "intro";
@@ -43,6 +44,7 @@ export const TEMPLATES: Record<TemplateKey, string[]> = {
     "No tenemos esa cantidad disponible ahora. Te paso con alguien del equipo para ver opciones.",
     "Esa cantidad no la tenemos disponible en este momento; ya le aviso a alguien del equipo para que te escriba.",
   ],
+  farewell: ["¡Gracias por escribirnos! Cualquier cosa, acá estamos.", "¡Un gusto! Cuando necesites, escribinos."],
   greeting: ["¡Hola! ¿En qué te puedo ayudar?", "¡Buenas! Contame, ¿qué necesitás?", "¡Hola! ¿Qué estás buscando?"],
   intro: ["¡Hola! Soy el asistente de {tenant}. ¿En qué te puedo ayudar?", "¡Buenas! Te escribe el asistente de {tenant}. Contame, ¿qué necesitás?"],
 };

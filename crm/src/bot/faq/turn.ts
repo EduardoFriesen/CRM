@@ -100,7 +100,8 @@ export async function answerTurn(
     await input.doHandoff(reason);
     r = { ...r, path: "handoff", handoff: true };
   }
-  if (!input.introduce) return { ...r, text: answer };
+  // A goodbye needs no introduction.
+  if (!input.introduce || call.fn === "farewell") return { ...r, text: answer };
   // The introduction already greets and asks what they need: a greeting or unclear message gets only that.
   const intro = fill("intro", { tenant: input.tenantName }, input.pick);
   return { ...r, text: call.fn === "unclear" || call.fn === "greeting" ? intro : `${intro}\n${answer}` };
