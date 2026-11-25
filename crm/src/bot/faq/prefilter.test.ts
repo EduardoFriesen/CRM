@@ -37,4 +37,29 @@ describe("prefilter", () => {
   it("ignores long messages", () => {
     expect(prefilter("hola buenas tardes queria saber cual es el horario de atencion", null)).toBeNull();
   });
+
+  it("never silences a question or an empty-after-trim check", () => {
+    for (const t of ["listo?", "ok?", "??"]) expect(prefilter(t, null)).toBeNull();
+    expect(prefilter("", null)).toEqual({ kind: "silence" });
+    expect(prefilter("  ", null)).toEqual({ kind: "silence" });
+  });
+
+  it("does not match rules when the customer gives info or asks prices", () => {
+    for (const t of [
+      "mi direccion es Belgrano 123",
+      "te paso mi ubicacion",
+      "mi envio no llego",
+      "me mandan foto?",
+      "a que hora me lo mandan",
+      "hacen descuento por efectivo?",
+      "cuanto sale con mercado pago",
+    ]) {
+      expect(prefilter(t, null), t).toBeNull();
+    }
+  });
+
+  it("keeps matching plain questions", () => {
+    expect(prefilter("atienden los sabados?", null)).toMatchObject({ fn: "hours" });
+    expect(prefilter("mi alias?", null)).toMatchObject({ fn: "handoff" });
+  });
 });
