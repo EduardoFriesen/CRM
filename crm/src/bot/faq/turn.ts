@@ -98,8 +98,10 @@ export async function answerTurn(
     await input.doHandoff(call.args.reason ?? "El cliente quiere avanzar con una compra");
     r = { ...r, path: "handoff", handoff: true };
   }
-  const intro = input.introduce ? `${fill("intro", { tenant: input.tenantName }, input.pick)}\n` : "";
-  return { ...r, text: intro + answer };
+  if (!input.introduce) return { ...r, text: answer };
+  // The introduction already asks what they need: an unclear message gets only that.
+  const intro = fill("intro", { tenant: input.tenantName }, input.pick);
+  return { ...r, text: call.fn === "unclear" ? intro : `${intro}\n${answer}` };
 }
 
 // The router call is metered and its errors classified like the main model's, except that a

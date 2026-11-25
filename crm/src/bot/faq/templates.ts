@@ -23,8 +23,14 @@ export const TEMPLATES: Record<TemplateKey, string[]> = {
   location: ["Estamos en {address}.", "Nos encontrás en {address}. ¡Te esperamos!"],
   payment_methods: ["Aceptamos {payment_methods}.", "Podés pagar con {payment_methods}."],
   shipping: ["Sobre los envíos: {shipping}", "Te cuento cómo hacemos los envíos: {shipping}"],
-  handoff: ["Genial, ya te paso con alguien del equipo para cerrarlo.", "Perfecto, te derivo con una persona del equipo para avanzar."],
-  unclear: ["Perdón, no te entendí bien. ¿Me contás un poco más qué buscás?", "Uh, no te pesqué bien. ¿Me lo explicás de otra forma?"],
+  // Neutral: the router also sends complaints here.
+  handoff: [
+    "Te paso con alguien del equipo, en un rato te escribe.",
+    "Ya le aviso a una persona del equipo para que te escriba.",
+    "Te va a escribir alguien del equipo en un rato.",
+  ],
+  // A bare "Hola" lands here too: invite, don't apologize.
+  unclear: ["Contame, ¿qué estás buscando?", "¿En qué te puedo ayudar?", "Decime, ¿qué necesitás?"],
   intro: ["¡Hola! Soy el asistente de {tenant}. ¿En qué te puedo ayudar?", "¡Buenas! Te escribe el asistente de {tenant}. Contame, ¿qué necesitás?"],
 };
 

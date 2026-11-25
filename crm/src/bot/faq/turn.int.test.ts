@@ -109,6 +109,12 @@ describe("answerTurn", () => {
     expect(typeof r !== "string" && r.text).toBe(`${fill("intro", { tenant: "Panadería" }, () => 0)}\n${fill("hours", { hours: "de 8 a 20" }, () => 0)}`);
   });
 
+  it("introducing itself on an unclear message sends only the introduction", async () => {
+    const t = await makeTenant();
+    const r = await answerTurn(t.id, input(customer("hola"), routerFor("unclear", {}), { introduce: true, pick: () => 0 }));
+    expect(r).toMatchObject({ path: "faq", fn: "unclear", text: fill("intro", { tenant: "Panadería" }, () => 0) });
+  });
+
   it("classifies the customer block after the last bot turn, and no router means complex", async () => {
     const t = await makeTenant();
     await saveBusinessProfile(t.id, { hours: "de 8 a 20" });

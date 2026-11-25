@@ -32,4 +32,11 @@ describe("templates", () => {
       }
     }
   });
+  it("handoff fits a purchase and a complaint alike", () => {
+    for (const v of TEMPLATES.handoff) expect(v).not.toMatch(/genial|perfecto|cerrar|avanzar/i);
+  });
+
+  it("unclear invites the customer instead of apologizing", () => {
+    for (const v of TEMPLATES.unclear) expect(v).not.toMatch(/perd[oó]n|no te (entend|pesqu)/i);
+  });
 });
