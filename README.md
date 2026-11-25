@@ -96,7 +96,7 @@ Antes de llamar al modelo principal, cada mensaje pasa por dos filtros baratos (
 3. La herramienta (schema + descripción) en `router.ts`, y el nombre en `FaqName` de `types.ts`.
 4. Opcional: una regla regex en `rules.ts` para resolverla sin gastar tokens.
 
-**Medir el router**: `cd crm && EVAL_MODEL=qwen3:8b npm run eval:router` (necesita Ollama local). Corre 30 mensajes realistas (con typos y abreviaturas) por prefiltro + router e imprime la precisión total, por función y los errores; falla debajo de 80%. No es parte de la suite.
+**Medir el router**: `cd crm && EVAL_MODEL=qwen3:8b npm run eval:router` (necesita Ollama local). Corre 33 mensajes realistas (con typos y abreviaturas) por prefiltro + router e imprime la precisión total, por función y los errores; falla debajo de 80%. No es parte de la suite.
 
 **Métricas**: `cd crm && npm run metrics -- [--tenant <slug>] [--days 7]` informa, por camino (silencio, regla, router, modelo principal), cuántos mensajes y tokens consumió y su costo. Los precios están en `crm/scripts/prices.json` (viene vacío, `{}`), con el formato `{ "<id del modelo>": { "input": <USD/1M>, "output": <USD/1M>, "cached": <USD/1M> } }`. Los modelos sin precio se listan aparte y quedan fuera del costo.
 

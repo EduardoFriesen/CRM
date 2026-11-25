@@ -16,6 +16,7 @@ test("Configuración saves the idle days", async ({ page }) => {
   await page.goto(`/t/${slug}`);
   await page.getByRole("navigation", { name: "Secciones del negocio" }).getByRole("link", { name: "Configuración" }).click();
   await page.getByRole("navigation", { name: "Secciones de configuración" }).getByRole("link", { name: "Tablero" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Tablero" })).toBeVisible();
   const field = page.getByLabel("Quitar consultas sin actividad después de N días");
   await expect(field).toHaveValue("1");
   await field.fill("3");

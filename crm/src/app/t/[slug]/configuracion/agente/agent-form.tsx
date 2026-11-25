@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import type { AgentView } from "@/agent/config";
 import type { Provider } from "@/db/schema";
@@ -145,6 +146,10 @@ export function AgentForm({
       <section className="panel" aria-labelledby="persona-title">
         <h2 id="persona-title">Personalidad e información</h2>
         <Field name="tone" label="Tono y actitud" errors={errors} defaultValue={values.tone} multiline rows={3} hint="Ej. Cálida, breve, con voseo. Sin emojis." />
+        <p className="meta-note">
+          Horarios, dirección, medios de pago y envíos se cargan en{" "}
+          <Link href={`/t/${slug}/configuracion/negocio`}>Configuración › Negocio</Link>.
+        </p>
       </section>
 
       <section className="panel" aria-labelledby="switches-title">

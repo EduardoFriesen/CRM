@@ -8,7 +8,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
   return (
     <main className="page">
       <div className="page-head">
-        <h1>Configuración</h1>
+        <h1>Tablero</h1>
         <p className="meta">Cómo se comporta el tablero de {tenant.name}.</p>
       </div>
       <SettingsForm slug={tenant.slug} consultaIdleDays={tenant.consultaIdleDays} />

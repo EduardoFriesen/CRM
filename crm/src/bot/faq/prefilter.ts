@@ -1,4 +1,4 @@
-import { plain } from "../../lib/plain";
+import { plain } from "@/lib/plain";
 import { NO_RULE, RULES, TRIVIAL } from "./rules";
 import type { Decision } from "./types";
 

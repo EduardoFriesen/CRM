@@ -19,6 +19,7 @@ test("Configuración opens on Agente and shows the three sub-tabs", async ({ pag
   await expect(nav.getByRole("link", { name: "Agente" })).toHaveAttribute("aria-current", "page");
   await expect(nav.getByRole("link", { name: "Tablero" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "Negocio" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "Configuración › Negocio" })).toHaveAttribute("href", `/t/${slug}/configuracion/negocio`);
 });
 
 test("old /agente link redirects", async ({ page }) => {
