@@ -1,3 +1,4 @@
+import { and, desc, eq } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { botEvents, type BOT_PATHS } from "@/db/schema";
 
@@ -31,4 +32,19 @@ export async function recordBotEvent(tenantId: string, e: BotEvent): Promise<voi
   } catch (err) {
     console.error(`bot event failed: ${codeOf(err)}`);
   }
+}
+
+export type LastAnswer = { path: BotPath; model: string | null; routerModel: string | null; createdAt: Date };
+
+// The newest turn that actually sent a reply to a customer.
+export async function getLastAnswer(tenantId: string): Promise<LastAnswer | null> {
+  const [row] = await withTenant(tenantId, (tx) =>
+    tx
+      .select({ path: botEvents.path, model: botEvents.model, routerModel: botEvents.routerModel, createdAt: botEvents.createdAt })
+      .from(botEvents)
+      .where(and(eq(botEvents.tenantId, tenantId), eq(botEvents.outcome, "sent")))
+      .orderBy(desc(botEvents.createdAt))
+      .limit(1),
+  );
+  return row ?? null;
 }

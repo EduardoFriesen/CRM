@@ -4,6 +4,8 @@ import { describeAgentError } from "@/agent/errors";
 import { usageMeter } from "@/usage/meter";
 import { relativeTime } from "@/lib/time";
 import { getUsageToday } from "@/usage/usage";
+import { getLastAnswer } from "@/usage/events";
+import { describeAnswerer } from "@/usage/last-answer";
 
 const n = new Intl.NumberFormat("es-AR");
 const NOTE = "Aproximado: tu proveedor puede reiniciar la cuota en otro horario (Google: medianoche del Pacífico).";
@@ -14,7 +16,7 @@ const LEVEL_TEXT = { ok: "", warn: "Cerca del límite", full: "Límite alcanzado
 export async function UsageBar({ tenantId, slug }: { tenantId: string; slug: string }) {
   let data;
   try {
-    data = await Promise.all([getUsageToday(tenantId), getAgentView(tenantId)]);
+    data = await Promise.all([getUsageToday(tenantId), getAgentView(tenantId), getLastAnswer(tenantId)]);
   } catch {
     // Never take the tenant screens down because of the usage strip.
     return (
@@ -23,7 +25,7 @@ export async function UsageBar({ tenantId, slug }: { tenantId: string; slug: str
       </section>
     );
   }
-  const [u, agent] = data;
+  const [u, agent, last] = data;
   const m = usageMeter(u, { requests: agent?.dailyRequestLimit ?? null, tokens: agent?.dailyTokenLimit ?? null });
   return (
     <section className="usage-bar" aria-label="Consumo de IA" title={NOTE}>
@@ -47,6 +49,10 @@ export async function UsageBar({ tenantId, slug }: { tenantId: string; slug: str
           {LEVEL_TEXT[m.level] && <strong className="usage-level">{LEVEL_TEXT[m.level]}</strong>}
         </span>
       )}
+      <span className="usage-answerer">
+        Última respuesta: {describeAnswerer(last)}
+        {last && ` (${relativeTime(last.createdAt)})`}
+      </span>
       <span className="usage-error">
         Último error:{" "}
         {agent?.lastErrorCode

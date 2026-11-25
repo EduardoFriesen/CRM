@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { getDb, withTenant } from "@/db/client";
 import { botEvents } from "@/db/schema";
-import { recordBotEvent, type BotEvent } from "@/usage/events";
+import { getLastAnswer, recordBotEvent, type BotEvent } from "@/usage/events";
 import { dropTenants, makeContact, makeTenant, ownerSql } from "@/test/db";
 
 afterAll(async () => {
@@ -65,5 +65,21 @@ describe("recordBotEvent", () => {
     expect(String(err.mock.calls[0][0])).toMatch(/^bot event failed: \S+$/);
     err.mockRestore();
     expect(await ownerSql`select 1 from bot_events where tenant_id = ${t.id}`).toHaveLength(0);
+  });
+});
+
+describe("getLastAnswer", () => {
+  it("returns the newest sent turn, ignoring skipped ones", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await recordBotEvent(t.id, { ...event(c.id), path: "complex", model: "big-1", routerModel: null });
+    await recordBotEvent(t.id, { ...event(c.id), outcome: "sent" });
+    await recordBotEvent(t.id, { ...event(c.id), path: "complex", model: "big-1", outcome: "skipped:quota" });
+    expect(await getLastAnswer(t.id)).toMatchObject({ path: "faq", routerModel: "small-1", model: null });
+  });
+
+  it("is null without answers", async () => {
+    const t = await makeTenant();
+    expect(await getLastAnswer(t.id)).toBeNull();
   });
 });

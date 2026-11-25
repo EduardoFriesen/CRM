@@ -331,6 +331,7 @@ input[aria-invalid="true"] {
 .level-full .usage-level {
   color: var(--danger);
 }
+.usage-answerer,
 .usage-error,
 .usage-note {
   color: var(--muted);
