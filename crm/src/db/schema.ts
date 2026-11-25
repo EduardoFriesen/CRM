@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, date, integer, numeric, pgEnum, pgTable, primaryKey, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, index, integer, numeric, pgEnum, pgTable, primaryKey, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 export const STAGES = ["consulta", "venta", "postventa"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -234,4 +234,32 @@ export const aiUsage = pgTable(
     replies: integer().notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.tenantId, t.day] })],
+);
+
+// Which path answered each customer turn. Metrics only: never the message text.
+export const BOT_PATHS = ["silence", "prefilter", "faq", "complex", "handoff", "relay"] as const;
+export const botPath = pgEnum("bot_path", BOT_PATHS);
+
+export const botEvents = pgTable(
+  "bot_events",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    tenantId: tenantId(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    path: botPath().notNull(),
+    fn: text(),
+    model: text(),
+    routerModel: text("router_model"),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    cachedTokens: integer("cached_tokens").notNull().default(0),
+    routerInputTokens: integer("router_input_tokens").notNull().default(0),
+    routerOutputTokens: integer("router_output_tokens").notNull().default(0),
+    latencyMs: integer("latency_ms").notNull().default(0),
+    outcome: text().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("bot_events_tenant_created_idx").on(t.tenantId, t.createdAt)],
 );

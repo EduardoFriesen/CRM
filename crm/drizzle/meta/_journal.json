@@ -162,6 +162,20 @@
       "when": 1795563868130,
       "tag": "0022_business_profiles_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795565295776,
+      "tag": "0023_bot_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795565295777,
+      "tag": "0024_bot_events_rls",
+      "breakpoints": true
     }
   ]
 }
