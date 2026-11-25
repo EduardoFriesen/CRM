@@ -12,6 +12,7 @@ test.beforeAll(async () => {
   const [c] = await sql<{ id: string }[]>`insert into contacts (tenant_id, jid, name) values (${t.id}, '5491122000099@s.whatsapp.net', 'Ana') returning id`;
   await sql`insert into escalations (tenant_id, contact_id, question, is_price, admin_message_id) values (${t.id}, ${c.id}, '¿Abren el domingo?', false, ${"E2E-" + suffix})`;
   await sql`insert into business_facts (tenant_id, question, answer) values (${t.id}, '¿Hacen envíos a Pilar?', 'Sí, los martes')`;
+  await sql`insert into router_examples (tenant_id, key, text, fn) values (${t.id}, 'che cuando estan abiertos', 'Che, ¿cuándo están abiertos?', 'hours')`;
 });
 test.afterAll(async () => {
   await sql`delete from tenants where slug in (${slug}, ${emptySlug})`;
@@ -42,4 +43,14 @@ test("a pending question can be dismissed", async ({ page }) => {
 test("explains what this screen is for when nothing was learned yet", async ({ page }) => {
   await page.goto(`/t/${emptySlug}/aprendido`);
   await expect(page.getByText(/Todavía no aprendió nada/)).toBeVisible();
+  await expect(page.getByText("Todavía no hay atajos: aparecen cuando el bot detecta preguntas frecuentes.")).toBeVisible();
+});
+
+test("lists the bot's shortcuts with their function and lets you delete one", async ({ page }) => {
+  await page.goto(`/t/${slug}/aprendido`);
+  const section = page.getByRole("region", { name: /Atajos del bot/ });
+  const item = section.getByRole("listitem").filter({ hasText: "Che, ¿cuándo están abiertos?" });
+  await expect(item).toContainText("Horarios");
+  await item.getByRole("button", { name: "Borrar atajo: Che, ¿cuándo están abiertos?" }).click();
+  await expect(page.getByText("Che, ¿cuándo están abiertos?")).toHaveCount(0);
 });

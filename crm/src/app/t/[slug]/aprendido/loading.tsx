@@ -7,6 +7,7 @@ export default function LearnedLoading() {
       <div className="skeleton skeleton-head" />
       <div className="skeleton skeleton-card" />
       <div className="skeleton skeleton-card" />
+      <div className="skeleton skeleton-card" />
     </main>
   );
 }

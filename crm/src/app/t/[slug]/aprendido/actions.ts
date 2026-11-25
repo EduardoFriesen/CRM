@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { deleteExample } from "@/bot/faq/examples";
 import { deleteFact, dismissEscalation, updateFact } from "@/facts/facts";
 import type { BusinessFact } from "@/db/schema";
 import type { Result } from "@/lib/result";
@@ -23,6 +24,13 @@ export async function deleteFactAction(slug: string, id: string): Promise<Result
 export async function dismissAction(slug: string, id: string): Promise<Result<{ id: string }>> {
   const tenant = await getCurrentTenant(slug);
   const r = await dismissEscalation(tenant.id, id);
+  if (r.success) revalidatePath(`/t/${tenant.slug}/aprendido`);
+  return r;
+}
+
+export async function deleteExampleAction(slug: string, id: string): Promise<Result<{ id: string }>> {
+  const tenant = await getCurrentTenant(slug);
+  const r = await deleteExample(tenant.id, id);
   if (r.success) revalidatePath(`/t/${tenant.slug}/aprendido`);
   return r;
 }
