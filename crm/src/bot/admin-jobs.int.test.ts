@@ -93,6 +93,8 @@ describe("runRelay", () => {
     expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain("Sí, los martes");
     const [row] = await ownerSql<{ author: string }[]>`select author from messages where wa_message_id = 'RELAY-1'`;
     expect(row.author).toBe("bot");
+    const events = await ownerSql`select path, outcome, model from bot_events where tenant_id = ${t.id}`;
+    expect(events).toEqual([{ path: "relay", outcome: "sent", model: "m" }]);
   });
 
   it("relays without tool calls in the history, even after a handoff", async () => {

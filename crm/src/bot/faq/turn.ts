@@ -1,0 +1,112 @@
+import type { LanguageModel } from "ai";
+import type { Stage } from "@/db/schema";
+import type { HistoryTurn } from "@/bot/history";
+import { classifyModelError, meter, type SkipOutcome, type TurnUsage } from "@/bot/reply";
+import type { BotEvent, BotPath } from "@/usage/events";
+import { answerFaq } from "./answers";
+import { prefilter } from "./prefilter";
+import { routeMessage } from "./router";
+import { fill } from "./templates";
+import type { FaqCall } from "./types";
+
+export type TurnResult = {
+  path: BotPath;
+  fn: string | null;
+  /** null = stay silent. */
+  text: string | null;
+  handoff: boolean;
+  routerModel: string | null;
+  usage: TurnUsage;
+  routerUsage: TurnUsage;
+};
+
+const zero = (): TurnUsage => ({ inputTokens: 0, outputTokens: 0, cachedTokens: 0 });
+const modelName = (m: LanguageModel) => (typeof m === "string" ? m : m.modelId);
+
+/** A turn that reached `path` and produced nothing (relay, or a model call that was skipped). */
+export function emptyTurn(path: BotPath, routerModel: LanguageModel | null = null): TurnResult {
+  return { path, fn: null, text: null, handoff: false, routerModel: routerModel && modelName(routerModel), usage: zero(), routerUsage: zero() };
+}
+
+/** One metrics row per turn: both calls' tokens summed, the router's also apart. Never message text. */
+export function turnEvent(contactId: string, outcome: string, r: TurnResult, model: string | null, latencyMs: number): BotEvent {
+  return {
+    contactId,
+    path: r.path,
+    fn: r.fn,
+    model,
+    routerModel: r.routerModel,
+    inputTokens: r.usage.inputTokens + r.routerUsage.inputTokens,
+    outputTokens: r.usage.outputTokens + r.routerUsage.outputTokens,
+    cachedTokens: r.usage.cachedTokens + r.routerUsage.cachedTokens,
+    routerInputTokens: r.routerUsage.inputTokens,
+    routerOutputTokens: r.routerUsage.outputTokens,
+    latencyMs,
+    outcome,
+  };
+}
+
+/**
+ * Produces the text for one customer turn: silence, a template answer (pre-filter rule or
+ * router), or the full bot (`runComplex`). Only Consulta uses the cheap paths.
+ */
+export async function answerTurn(
+  tenantId: string,
+  input: {
+    turns: HistoryTurn[];
+    stage: Stage;
+    introduce: boolean;
+    tenantName: string;
+    routerModel: LanguageModel | null;
+    runComplex: () => Promise<{ text: string; usage: TurnUsage } | SkipOutcome>;
+    doHandoff: (reason: string) => Promise<void>;
+    pick?: () => number;
+  },
+): Promise<TurnResult | SkipOutcome> {
+  const base = emptyTurn("complex");
+  const complex = async (r: TurnResult): Promise<TurnResult | SkipOutcome> => {
+    const reply = await input.runComplex();
+    return typeof reply === "string" ? reply : { ...r, path: "complex", text: reply.text, usage: reply.usage };
+  };
+  if (input.stage !== "consulta") return complex(base);
+
+  const lastOther = input.turns.findLastIndex((t) => t.role !== "user");
+  const text = input.turns.slice(lastOther + 1).map((t) => t.text).join("\n");
+  const decision = prefilter(text, lastOther >= 0 ? input.turns[lastOther].text : null);
+  if (decision?.kind === "silence") return { ...base, path: "silence" };
+
+  let call: FaqCall;
+  let r: TurnResult;
+  if (decision) {
+    call = decision;
+    r = { ...base, path: "prefilter", fn: decision.fn };
+  } else {
+    if (!input.routerModel) return complex(base);
+    const routed = await route(tenantId, input.routerModel, input.turns);
+    if (typeof routed === "string") return routed;
+    r = { ...base, path: "faq", fn: routed.call.fn, routerModel: modelName(input.routerModel), routerUsage: routed.usage };
+    if (routed.call.fn === "complex") return complex({ ...r, fn: null });
+    call = routed.call;
+  }
+
+  const answer = await answerFaq(tenantId, call, input.pick);
+  if (answer === null) return complex(r);
+  if (call.fn === "handoff") {
+    await input.doHandoff(call.args.reason ?? "El cliente quiere avanzar con una compra");
+    r = { ...r, path: "handoff", handoff: true };
+  }
+  const intro = input.introduce ? `${fill("intro", { tenant: input.tenantName }, input.pick)}\n` : "";
+  return { ...r, text: intro + answer };
+}
+
+// The router call is metered and its errors classified exactly like the main model's.
+async function route(tenantId: string, model: LanguageModel, turns: HistoryTurn[]) {
+  try {
+    const routed = await routeMessage(model, turns);
+    await meter(tenantId, { requests: 1, inputTokens: routed.usage.inputTokens, outputTokens: routed.usage.outputTokens });
+    return routed;
+  } catch (e) {
+    await meter(tenantId, { requests: 1 });
+    return classifyModelError(tenantId, e);
+  }
+}

@@ -3,6 +3,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { getAgentView, saveAgentConfig } from "@/agent/config";
 import { runConversation, SAFE_HANDOFF_TEXT } from "@/bot/reply";
+import { createProduct } from "@/catalog/catalog";
 import { dropTenants, makeContact, makeInstance, makeTenant, ownerSql } from "@/test/db";
 
 afterAll(async () => {
@@ -65,7 +66,11 @@ describe("runConversation", () => {
     await say(t.id, c.id, "customer", "última", 1);
     const model = new MockLanguageModelV4({ doGenerate: text("ok") });
     await runConversation(t.id, c.id, { model, send: sendOk() });
-    expect(model.doGenerateCalls[0].prompt.filter((m) => m.role !== "system").length).toBeLessThanOrEqual(6);
+    const sent = JSON.stringify(model.doGenerateCalls[0].prompt.filter((m) => m.role !== "system"));
+    // Newest 6 stored: m5..m9 and "última". m5 is the bot's and opens the window, so it is
+    // dropped (history starts with the customer); m4 and older never load.
+    for (const m of ["m6", "m7", "m8", "m9", "última"]) expect(sent).toContain(`"${m}"`);
+    for (const m of ["m0", "m1", "m2", "m3", "m4", "m5"]) expect(sent).not.toContain(`"${m}"`);
   });
 
   it("caches the system prompt for anthropic", async () => {
@@ -455,7 +460,7 @@ describe("runConversation", () => {
 
     it("hands off: pauses the chat, moves it to venta and tells the admin", async () => {
       const { t, c } = await setup();
-      await say(t.id, c.id, "customer", "Dale, lo quiero. ¿Cómo pago?");
+      await say(t.id, c.id, "customer", "Dale, lo quiero. ¿Cómo seguimos?");
       const model = new MockLanguageModelV4({
         doGenerate: [toolCall("handoff_to_admin", { reason: "Quiere 3 docenas para el sábado" }), text("Te atiende alguien del equipo.")],
       });
@@ -534,7 +539,7 @@ describe("runConversation", () => {
 
     it("does not hand off twice when the model already did", async () => {
       const { t, c } = await setup();
-      await say(t.id, c.id, "customer", "dale, ¿cómo pago?");
+      await say(t.id, c.id, "customer", "dale, ¿cómo seguimos?");
       const model = new MockLanguageModelV4({
         doGenerate: [toolCall("handoff_to_admin", { reason: "Quiere pagar" }), text("Pasame tu CBU")],
       });
@@ -551,6 +556,87 @@ describe("runConversation", () => {
       const model = new MockLanguageModelV4({ doGenerate: text("Sí, los martes") });
       await runConversation(t.id, c.id, { model, send: sendOk() });
       expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain("Sí, los martes");
+    });
+  });
+
+  describe("faq router", () => {
+    const router = (toolName: string, input: object) => new MockLanguageModelV4({ doGenerate: toolCall(toolName, input) });
+    const events = (tenantId: string) =>
+      ownerSql<{ path: string; fn: string | null; outcome: string; router_input_tokens: number }[]>`
+        select path, fn, outcome, router_input_tokens from bot_events where tenant_id = ${tenantId}`;
+
+    it("answers a FAQ with a template and records the event", async () => {
+      const { t, c } = await setup({ discloseAi: false });
+      await createProduct(t.id, { name: "Pan de campo", price: "2500" });
+      await say(t.id, c.id, "customer", "che cuanto sale el pan");
+      const model = new MockLanguageModelV4({ doGenerate: text("no debería usarse") });
+      const send = sendOk();
+      expect(await runConversation(t.id, c.id, { model, routerModel: router("price", { product: "pan" }), send })).toBe("sent");
+      expect(model.doGenerateCalls).toHaveLength(0);
+      expect(send).toHaveBeenCalledWith(t.slug, c.jid, expect.stringContaining("Pan de campo"));
+      expect(await events(t.id)).toEqual([{ path: "faq", fn: "price", outcome: "sent", router_input_tokens: 1 }]);
+    });
+
+    it("does not send a template over an admin who wrote meanwhile", async () => {
+      const { t, c } = await setup({ discloseAi: false });
+      await createProduct(t.id, { name: "Pan de campo", price: "2500" });
+      await say(t.id, c.id, "customer", "che cuanto sale el pan", 1);
+      const routerModel = new MockLanguageModelV4({
+        doGenerate: async () => {
+          await say(t.id, c.id, "admin", "Ana, te paso el precio yo");
+          return toolCall("price", { product: "pan" });
+        },
+      });
+      const send = sendOk();
+      expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), routerModel, send })).toBe(
+        "skipped:not-customer-last",
+      );
+      expect(send).not.toHaveBeenCalled();
+      expect(await events(t.id)).toMatchObject([{ path: "faq", outcome: "skipped:not-customer-last" }]);
+    });
+
+    it("records nothing when the chat is paused", async () => {
+      const { t, c } = await setup();
+      await ownerSql`update contacts set bot_paused_until = now() + interval '1 hour' where id = ${c.id}`;
+      await say(t.id, c.id, "customer", "che cuanto sale el pan");
+      expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), routerModel: router("price", { product: "pan" }), send: sendOk() })).toBe("skipped:paused");
+      expect(await events(t.id)).toEqual([]);
+    });
+
+    it("stays silent on a trivial message and records it", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "gracias!");
+      const send = sendOk();
+      expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send })).toBe("skipped:trivial");
+      expect(send).not.toHaveBeenCalled();
+      expect(await events(t.id)).toMatchObject([{ path: "silence", outcome: "skipped:trivial" }]);
+    });
+
+    it("meters the router call and records both calls on the complex path", async () => {
+      const { t, c } = await setup();
+      await ownerSql`delete from ai_usage where tenant_id = ${t.id}`;
+      await say(t.id, c.id, "customer", "che cuanto sale el pan");
+      const model = new MockLanguageModelV4({ doGenerate: text("No lo tengo cargado, consulto.") });
+      await runConversation(t.id, c.id, { model, routerModel: router("price", { product: "pan" }), send: sendOk() });
+      const [u] = await ownerSql<{ requests: number; input_tokens: string }[]>`select requests, input_tokens from ai_usage where tenant_id = ${t.id}`;
+      expect(u).toEqual({ requests: 2, input_tokens: "2" });
+      const [e] = await ownerSql<{ path: string; input_tokens: number; router_input_tokens: number; model: string; router_model: string }[]>`
+        select path, input_tokens, router_input_tokens, model, router_model from bot_events where tenant_id = ${t.id}`;
+      expect(e).toEqual({ path: "complex", input_tokens: 2, router_input_tokens: 1, model: "m", router_model: "mock-model-id" });
+    });
+
+    it("stops on an exhausted quota in the router without calling the main model", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "che cuanto sale el pan");
+      const routerModel = new MockLanguageModelV4({
+        doGenerate: async () => {
+          throw new APICallError({ message: "quota", url: "https://x", requestBodyValues: {}, statusCode: 429, responseBody: "PerDay" });
+        },
+      });
+      const model = new MockLanguageModelV4({ doGenerate: text("x") });
+      expect(await runConversation(t.id, c.id, { model, routerModel, send: sendOk() })).toBe("skipped:quota");
+      expect(model.doGenerateCalls).toHaveLength(0);
+      expect(await events(t.id)).toMatchObject([{ path: "faq", outcome: "skipped:quota" }]);
     });
   });
 });

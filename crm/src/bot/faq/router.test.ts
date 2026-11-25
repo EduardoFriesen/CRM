@@ -1,5 +1,6 @@
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { describe, expect, it } from "vitest";
 import type { HistoryTurn } from "@/bot/history";
 import { routeMessage } from "./router";
@@ -74,5 +75,26 @@ describe("routeMessage", () => {
       },
     });
     await expect(routeMessage(model, turns(1))).rejects.toBeInstanceOf(APICallError);
+  });
+
+  it("works with openai-compatible / ollama models", async () => {
+    const fetch = async () =>
+      Response.json({
+        id: "r1",
+        created: 0,
+        model: "m",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: null, tool_calls: [{ id: "c1", type: "function", function: { name: "hours", arguments: "{}" } }] },
+            finish_reason: "tool_calls",
+          },
+        ],
+        usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 },
+      });
+    const model = createOpenAICompatible({ name: "ollama", baseURL: "http://localhost:1/v1", fetch })("qwen3:8b");
+    const r = await routeMessage(model, turns(1));
+    expect(r.call).toEqual({ fn: "hours", args: {} });
+    expect(r.usage).toMatchObject({ inputTokens: 12, outputTokens: 3 });
   });
 });

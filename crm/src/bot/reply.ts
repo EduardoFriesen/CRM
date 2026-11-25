@@ -15,6 +15,8 @@ import { buildSystemPrompt } from "./prompt";
 import { enqueueReminder } from "./queue";
 import { asksForSensitiveData } from "./sensitive-guard";
 import { handOff, makeTools } from "./tools";
+import { answerTurn, emptyTurn, turnEvent, type TurnResult } from "./faq/turn";
+import { recordBotEvent } from "@/usage/events";
 
 const HISTORY = 6;
 const MAX_BOT_REPLIES_PER_HOUR = 20;
@@ -31,6 +33,7 @@ export type ConversationOutcome =
   | "skipped:empty"
   | "skipped:model-error"
   | "skipped:paused"
+  | "skipped:trivial"
   | "skipped:not-answered"
   | "skipped:quota";
 
@@ -164,27 +167,36 @@ async function deliver(
   await meter(tenantId, { replies: 1 });
 }
 
+export type SkipOutcome = "skipped:key-invalid" | "skipped:model-error" | "skipped:quota";
+const isSkip = (r: unknown): r is SkipOutcome => r === "skipped:key-invalid" || r === "skipped:model-error" || r === "skipped:quota";
+
+// Records a failed model call and decides its fate: skip for good, or rethrow a transient
+// failure so the queue retries.
+export async function classifyModelError(tenantId: string, e: unknown): Promise<SkipOutcome> {
+  if (isQuotaExhausted(e)) {
+    await recordAgentError(tenantId, "QUOTA_EXCEEDED");
+    return "skipped:quota";
+  }
+  await recordAgentError(tenantId, errorCode(e));
+  if (isAuthError(e)) {
+    await markKeyInvalid(tenantId);
+    return "skipped:key-invalid";
+  }
+  // Permanent errors (bad request, unknown model…) are recorded, not retried.
+  if ((APICallError.isInstance(e) && !e.isRetryable) || errorCode(e) === "OLLAMA_UNAVAILABLE") return "skipped:model-error";
+  throw e;
+}
+
 async function generateOrRecord(
   tenantId: string,
-  rt: { pauseHours: number } & Parameters<typeof createModel>[0],
+  rt: Parameters<typeof createModel>[0],
   model: LanguageModel | undefined,
   args: Parameters<typeof generateAgentText>[2],
-): Promise<{ text: string; usage: TurnUsage } | "skipped:key-invalid" | "skipped:model-error" | "skipped:quota"> {
+): Promise<{ text: string; usage: TurnUsage } | SkipOutcome> {
   try {
     return await generateAgentText(tenantId, model ?? (await createModel(rt)), args);
   } catch (e) {
-    if (isQuotaExhausted(e)) {
-      await recordAgentError(tenantId, "QUOTA_EXCEEDED");
-      return "skipped:quota";
-    }
-    await recordAgentError(tenantId, errorCode(e));
-    if (isAuthError(e)) {
-      await markKeyInvalid(tenantId);
-      return "skipped:key-invalid";
-    }
-    // Permanent errors (bad request, unknown model…) are recorded, not retried.
-    if ((APICallError.isInstance(e) && !e.isRetryable) || errorCode(e) === "OLLAMA_UNAVAILABLE") return "skipped:model-error";
-    throw e;
+    return classifyModelError(tenantId, e);
   }
 }
 
@@ -208,9 +220,12 @@ export async function runConversation(
     send?: typeof sendText;
     now?: Date;
     model?: LanguageModel;
+    /** null skips the router. Defaults to null when `model` is given (tests), else the tenant's router model. */
+    routerModel?: LanguageModel | null;
     scheduleReminder?: (escalationId: string) => Promise<void>;
   } = {},
 ): Promise<ConversationOutcome> {
+  const started = Date.now();
   const now = deps.now ?? new Date();
   const send = deps.send ?? sendText;
   const rt = await getAgentRuntime(tenantId);
@@ -223,52 +238,80 @@ export async function runConversation(
   if (conv.botLastHour >= MAX_BOT_REPLIES_PER_HOUR) return "skipped:rate-limit";
 
   const introduce = rt.discloseAi && (!conv.lastBotAt || now.getTime() - conv.lastBotAt.getTime() > INTRO_GAP_MS);
-  const facts = await recentFacts(tenantId);
-  const system = buildSystemPrompt({
-    ...rt,
-    business: await getBusinessProfile(tenantId),
-    cache: rt.provider === "anthropic",
-    tenantName: conv.tenantName,
-    introduce,
-    now,
-    facts,
-    stage: conv.contact.stage,
-  });
-  const history = toModelMessages(conv.recent.map(toTurn), { toolCalls: true });
+  const stage = conv.contact.stage;
   let handedOff = false;
+  let complexRan = false;
   const notify = (t: string) => notifyAdmin(tenantId, t, { send });
 
-  const reply = await generateOrRecord(tenantId, rt, deps.model, {
-    system,
-    messages: history,
-    tools: makeTools(tenantId, contactId, {
-      dryRun: false,
-      notify,
-      scheduleReminder: deps.scheduleReminder ?? ((id) => enqueueReminder(tenantId, id)),
-      pauseHours: rt.pauseHours,
-      onHandoff: () => (handedOff = true),
-    }),
-  });
-  if (reply === "skipped:key-invalid" || reply === "skipped:model-error" || reply === "skipped:quota") return reply;
+  const runComplex = async () => {
+    complexRan = true;
+    const system = buildSystemPrompt({
+      ...rt,
+      business: await getBusinessProfile(tenantId),
+      cache: rt.provider === "anthropic",
+      tenantName: conv.tenantName,
+      introduce,
+      now,
+      facts: await recentFacts(tenantId),
+      stage,
+    });
+    return generateOrRecord(tenantId, rt, deps.model, {
+      system,
+      messages: toModelMessages(conv.recent.map(toTurn), { toolCalls: true }),
+      tools: makeTools(tenantId, contactId, {
+        dryRun: false,
+        notify,
+        scheduleReminder: deps.scheduleReminder ?? ((id) => enqueueReminder(tenantId, id)),
+        pauseHours: rt.pauseHours,
+        onHandoff: () => (handedOff = true),
+      }),
+    });
+  };
 
-  let text = truncateForWhatsApp(reply.text.trim());
-  if (!text) return "skipped:empty";
+  let routerModel: LanguageModel | null;
+  try {
+    routerModel = deps.routerModel !== undefined ? deps.routerModel : deps.model ? null : await createModel({ ...rt, model: rt.routerModel ?? rt.model });
+  } catch (e) {
+    return classifyModelError(tenantId, e);
+  }
+
+  const turn = await answerTurn(tenantId, {
+    turns: conv.recent.map(toTurn),
+    stage,
+    introduce,
+    tenantName: conv.tenantName,
+    routerModel,
+    runComplex,
+    doHandoff: async (reason) => {
+      await handOff(tenantId, contactId, reason, { notify, pauseHours: rt.pauseHours });
+      handedOff = true;
+    },
+  });
+  // One metrics row per turn that got past the entry guards.
+  const record = (outcome: ConversationOutcome, r: TurnResult) =>
+    recordBotEvent(tenantId, turnEvent(contactId, outcome, r, r.path === "complex" ? rt.model : null, Date.now() - started)).then(() => outcome);
+  // A skipped turn stopped in the main model if it ran, else in the router.
+  if (isSkip(turn)) return record(turn, emptyTurn(complexRan ? "complex" : "faq", stage === "consulta" ? routerModel : null));
+  if (turn.text === null) return record("skipped:trivial", turn);
+
+  let text = truncateForWhatsApp(turn.text.trim());
+  if (!text) return record("skipped:empty", turn);
 
   // The reply covers messages up to `cutoff`. If the admin wrote meanwhile, don't talk
   // over them; a customer message newer than the cutoff gets its own follow-up job.
   const cutoff = conv.recent.at(-1)!.sentAt;
-  if (await adminWroteSince(tenantId, contactId, cutoff)) return "skipped:not-customer-last";
+  if (await adminWroteSince(tenantId, contactId, cutoff)) return record("skipped:not-customer-last", turn);
 
   // Never ask the customer for bank, card or identity data, whatever the model wrote: a
-  // person takes over the payment instead.
-  if (asksForSensitiveData(text)) {
+  // person takes over the payment instead. Templates are fixed text.
+  if (turn.path === "complex" && asksForSensitiveData(text)) {
     text = SAFE_HANDOFF_TEXT;
     if (!handedOff) await handOff(tenantId, contactId, "El bot iba a pedirle datos de pago; coordiná el pago vos.", { notify, pauseHours: rt.pauseHours });
     handedOff = true;
   }
 
   await deliver(tenantId, contactId, { instance: conv.instance.name, jid: conv.contact.jid }, text, new Date(cutoff.getTime() + 1), send, handedOff);
-  return "sent";
+  return record("sent", turn);
 }
 
 // Tells the customer what the admin answered to an escalation, in the agent's voice, then
@@ -313,6 +356,10 @@ async function relayToCustomer(
   if (conv.contact.botPausedUntil && conv.contact.botPausedUntil > now) return "skipped:paused";
   if (conv.botLastHour >= MAX_BOT_REPLIES_PER_HOUR) return "skipped:rate-limit";
 
+  const started = Date.now();
+  const turn = emptyTurn("relay");
+  const record = (outcome: ConversationOutcome) =>
+    recordBotEvent(tenantId, turnEvent(contactId, outcome, turn, rt.model, Date.now() - started)).then(() => outcome);
   const system = buildSystemPrompt({
     ...rt,
     business: await getBusinessProfile(tenantId),
@@ -332,14 +379,15 @@ async function relayToCustomer(
   });
 
   const reply = await generateOrRecord(tenantId, rt, model, { system, messages: history, tools: {} });
-  if (reply === "skipped:key-invalid" || reply === "skipped:model-error" || reply === "skipped:quota") return reply;
+  if (isSkip(reply)) return record(reply);
+  turn.usage = reply.usage;
   const text = truncateForWhatsApp(reply.text.trim());
-  if (!text) return "skipped:empty";
+  if (!text) return record("skipped:empty");
 
   // Same guards as a normal reply: don't talk over an admin who wrote meanwhile, and place
   // the message right after what it saw so a customer message sent meanwhile stays last.
   const cutoff = conv.recent.at(-1)?.sentAt ?? now;
-  if (await adminWroteSince(tenantId, contactId, cutoff)) return "skipped:not-customer-last";
+  if (await adminWroteSince(tenantId, contactId, cutoff)) return record("skipped:not-customer-last");
   await deliver(tenantId, contactId, { instance: conv.instance.name, jid: conv.contact.jid }, text, new Date(cutoff.getTime() + 1), send);
-  return "sent";
+  return record("sent");
 }
