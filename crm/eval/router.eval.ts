@@ -8,7 +8,9 @@ const MODEL = process.env.EVAL_MODEL ?? "qwen3:8b";
 const MIN_ACCURACY = 0.8;
 
 type Expected = string; // an FAQ name, "complex" or "silence"
-type Case = { text: string; before?: HistoryTurn[]; expected: Expected };
+type Case = { text: string; before?: HistoryTurn[]; facts?: { question: string }[]; expected: Expected };
+
+const FACTS = [{ question: "¿Hacen factura A?" }, { question: "¿Tienen estacionamiento?" }];
 
 // Complaints and purchase/payment/reservation requests are `handoff` (see the router instructions).
 const cases: Case[] = [
@@ -38,6 +40,13 @@ const cases: Case[] = [
     expected: "quote",
   },
   { text: "quiero comprar", expected: "handoff" },
+  { text: "chau, gracias", expected: "farewell" },
+  { text: "bueno me voy, hasta la proxima", expected: "farewell" },
+  { text: "cuando me llega el pedido?", expected: "order_status" },
+  { text: "mi pedido llego roto", expected: "handoff" },
+  { text: "emiten factura a?", facts: FACTS, expected: "learned" },
+  { text: "hay lugar para estacionar?", facts: FACTS, expected: "learned" },
+  { text: "hacen factura B?", facts: FACTS, expected: "complex" },
   { text: "mi envio no llego", expected: "handoff" },
   { text: "quiero hablar con una persona", expected: "handoff" },
   { text: "eso", expected: "unclear" },
@@ -74,7 +83,7 @@ async function route(model: Awaited<ReturnType<typeof createModel>>, c: Case): P
   const lastBot = [...(c.before ?? [])].reverse().find((t) => t.role === "assistant")?.text ?? null;
   const pre = prefilter(c.text, lastBot);
   if (pre) return pre.kind === "silence" ? "silence" : pre.fn;
-  const { call } = await routeMessage(model, [...(c.before ?? []), { role: "user", text: c.text }]);
+  const { call } = await routeMessage(model, [...(c.before ?? []), { role: "user", text: c.text }], { facts: c.facts });
   return call.fn;
 }
 

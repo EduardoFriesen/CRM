@@ -12,7 +12,7 @@ export const GREETING = new RegExp(
 );
 
 // One line of `plain` text that is only a goodbye: at least one farewell word, courtesies allowed.
-const BYE = "chau|chao|adios|hasta luego|hasta manana|nos vemos|saludos";
+const BYE = "chau|chao|adios|hasta luego|hasta manana|hasta la proxima|nos vemos|me voy|saludos";
 const COURTESY = "muchas gracias|gracias|ok|oka|dale|listo|bueno";
 export const FAREWELL = new RegExp(
   `^${SEP}(?:(?:${COURTESY})${SEP})*(?:${BYE})${SEP}(?:(?:${BYE}|${COURTESY})${SEP})*$`,

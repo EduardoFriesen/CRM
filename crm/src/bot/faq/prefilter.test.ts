@@ -63,7 +63,7 @@ describe("prefilter", () => {
   });
 
   it("answers a bare farewell without the router", () => {
-    for (const t of ["chau", "Chau!!", "gracias, chau", "hasta luego", "nos vemos 👋", "adiós", "saludos", "ok dale, hasta mañana"]) {
+    for (const t of ["chau", "Chau!!", "gracias, chau", "hasta luego", "nos vemos 👋", "adiós", "saludos", "ok dale, hasta mañana", "bueno me voy, hasta la próxima"]) {
       expect(prefilter(t, null), t).toEqual({ kind: "faq", fn: "farewell", args: {} });
     }
     expect(prefilter("buenas noches", null)).toMatchObject({ fn: "greeting" });

@@ -201,6 +201,15 @@ describe("answerTurn", () => {
     expect(r).toMatchObject({ path: "example", fn: "learned", text: "Sí, factura A." });
   });
 
+  it("a learned pick is dropped when the message names a letter or number the question does not", async () => {
+    const t = await makeTenant();
+    await ownerSql`insert into business_facts (tenant_id, question, answer) values (${t.id}, '¿Hacen factura A?', 'Sí, factura A.')`;
+    for (const text of ["hacen factura B?", "y factura 2?"]) {
+      expect(await answerTurn(t.id, input(customer(text), routerFor("learned", { n: 1 }))), text).toMatchObject({ path: "complex" });
+    }
+    expect(await answerTurn(t.id, input(customer("emiten factura A?"), routerFor("learned", { n: 1 })))).toMatchObject({ path: "faq", text: "Sí, factura A." });
+  });
+
   it("introduces itself on a template answer", async () => {
     const t = await makeTenant();
     await saveBusinessProfile(t.id, { hours: "de 8 a 20" });

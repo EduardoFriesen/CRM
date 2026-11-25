@@ -159,7 +159,10 @@ Cada función recibe los args del router y el tenant, consulta datos y devuelve
 | `unclear` | — | plantilla de pedido de aclaración | nunca |
 | `catalog` | `searchCatalog` sin filtro | hasta 10 productos con precio (+ "sin stock" si aplica); si hay más, "tengo más opciones" | catálogo vacío |
 | `quote` | `matchProducts` (filas completas, solo en el servidor) | por ítem `• Producto: cant × precio = subtotal` + total en centavos, "(sin envío)" y "¿Querés avanzar con el pedido?". Nombre exacto gana; si no, una sola coincidencia. Cantidad > stock: plantilla `quote_short` (nunca muestra el stock) + traspaso a una persona | algún producto sin coincidencia única, lista vacía |
-| `greeting` | — | primer contacto: solo la intro; después: plantilla de saludo corto. La regla `GREETING` (`rules.ts`) lo resuelve sin router si el mensaje es solo un saludo | nunca |
+| `greeting` | — | primer contacto: solo la intro; después: plantilla de saludo corto. Solo por la regla `GREETING` (`rules.ts`) o un atajo: el router ya no la ofrece (confundía "dale" y "hola, me interesa") | nunca |
+| `farewell` | — | plantilla de despedida (sin intro); regla `FAREWELL` o router; si el bot ya se despidió, silencio | nunca |
+| `order_status` | `orders` del contacto (solo Postventa) | pendiente más próximo: fecha y dirección; si no, último entregado. Cancelados se ignoran | sin pendientes ni entregados |
+| `learned` | `business_facts` (30 más recientes, numeradas en el prompt) | la respuesta del admin tal cual. Se descarta si el mensaje nombra una letra o número que la pregunta no tiene | fact inexistente |
 
 - Plantillas: 2-3 variantes por función, en rioplatense con voseo, elegidas al azar
   (función de azar inyectable para tests). Variables con `{nombre}`.
@@ -277,3 +280,7 @@ Configuración
 - Orden de las tareas y cómo partir los commits (TDD por función).
 - Formato de salida del script de métricas.
 - Los ~30 mensajes del eval del router.
+
+## Extensión 2026-11-25
+
+Ver `2026-11-25-router-learning-design.md`: router también en Postventa (funciones acotadas), atajos (`router_examples`, path `example`) que marca el modelo pesado con `mark_faq`, y la pantalla "Atajos del bot" en Aprendido.

@@ -36,7 +36,6 @@ const SCHEMAS = {
       .max(10),
   }),
   catalog: none,
-  greeting: none,
   farewell: none,
   order_status: none,
   unclear: none,
@@ -53,7 +52,6 @@ const DESCRIPTIONS: Record<keyof typeof SCHEMAS, string> = {
   handoff: "The customer wants to buy, pay, reserve, talk to a person or complain.",
   quote: "The customer asks the total for a quantity of one or more products, or says they want a quantity of a product.",
   catalog: "The customer asks to see the catalog, the price list or what products you sell (not one specific product).",
-  greeting: "The message is only a greeting, with no question or request.",
   farewell: "The message is only a goodbye, with no question or request.",
   order_status: "The customer asks when their order arrives, where it is or its status (not a complaint).",
   unclear: "The message is too vague to tell what the customer wants.",
@@ -71,11 +69,10 @@ const INSTRUCTIONS = `Sos un clasificador de mensajes de clientes de un negocio 
 Elegí exactamente una función según el ÚLTIMO mensaje del cliente; el contexto previo solo sirve para entenderlo.
 - price / stock: pregunta por el precio o la disponibilidad de un producto (indicá el producto).
 - hours, location, payment_methods, shipping: preguntas frecuentes sobre el negocio. shipping es solo si hacen envíos, zonas o costo (no un pedido ya hecho).
-- Ingredientes, alérgenos o características de un producto no son stock: son complex.
+- Ingredientes o características de un producto: complex.
 - quote: pide cuánto sale una cantidad de uno o más productos, o dice que quiere una cantidad ("quiero 300 m2 de kikuyo", "quiero comprar 2 panes"). Indicá cada producto y su cantidad como número.
 - catalog: pide ver el catálogo, la lista de precios o qué productos venden, sin nombrar uno.
-- greeting: el mensaje es SOLO un saludo (hola, buenas, cómo andan). Si además dice algo más, aunque sea vago ("hola, me interesa"), no es greeting.
-- farewell: el mensaje es SOLO una despedida (chau, hasta luego). Si además pide algo, no es farewell.
+- farewell: SOLO una despedida (chau, hasta luego); si además pide algo, no es farewell.
 - order_status: pregunta cuándo llega, dónde está o en qué estado está SU pedido. Un reclamo (llegó mal, no llegó, falta algo) es handoff.
 - handoff: quiere comprar sin decir cantidad, pagar, reservar, hablar con una persona o hacer un reclamo (indicá el motivo).
 - unclear: mensaje demasiado vago para saber qué quiere.
@@ -101,7 +98,7 @@ function examplesSection(examples: RouterContext["examples"] = [], facts: { id?:
 function learnedSection(facts: { question: string }[]): string {
   if (facts.length === 0) return "";
   const list = facts.map((f, i) => `${i + 1}. ${clip(f.question)}`).join("\n");
-  return `\n- learned: el cliente pregunta lo mismo que una de las preguntas ya respondidas (aunque con otras palabras); indicá su número. Si no es claramente la misma, no la elijas.\nPreguntas ya respondidas por el negocio:\n${list}`;
+  return `\n- learned: el cliente pregunta lo mismo que una de las preguntas ya respondidas (aunque con otras palabras); indicá su número. Si coincide, learned tiene prioridad sobre las demás funciones. Si cambia un dato (otra letra, producto, zona o día), no es la misma: elegí complex.\nPreguntas ya respondidas por el negocio:\n${list}`;
 }
 
 export async function routeMessage(

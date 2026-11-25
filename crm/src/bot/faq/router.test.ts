@@ -32,7 +32,7 @@ describe("routeMessage", () => {
     expect(c.toolChoice?.type).toBe("required");
     expect(c.maxOutputTokens).toBe(200);
     expect(c.tools?.map((t) => t.name).sort()).toEqual(
-      ["catalog", "complex", "farewell", "greeting", "handoff", "hours", "location", "order_status", "payment_methods", "price", "quote", "shipping", "stock", "unclear"],
+      ["catalog", "complex", "farewell", "handoff", "hours", "location", "order_status", "payment_methods", "price", "quote", "shipping", "stock", "unclear"],
     );
   });
 
@@ -69,6 +69,7 @@ describe("routeMessage", () => {
     expect(r.call).toEqual({ fn: "learned", args: { n: 2 } });
     expect(sysOf(some)).toContain("1. ¿Hacen factura A?");
     expect(sysOf(some)).toContain("2. ¿Tienen estacionamiento?");
+    expect(sysOf(some)).toContain("Si cambia un dato");
   });
 
   it("learned with n out of range falls back to complex", async () => {
