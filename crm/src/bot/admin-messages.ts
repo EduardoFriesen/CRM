@@ -22,6 +22,9 @@ export const reminderText = (c: Who, question: string) => `Recordatorio: ${escal
 export const handoffText = (c: Who, reason: string) =>
   `Traspaso: ${who(c)} quiere cerrar una compra. ${sentence(reason)} Atendelo desde el WhatsApp del negocio.`;
 
+export const attentionText = (c: Who, reason: string) =>
+  `⚠️ ${who(c)} necesita atención: ${sentence(reason)} Atendelo desde el WhatsApp del negocio.`;
+
 export type NotLearned = "price" | "personal" | null;
 const NOT_LEARNED_NOTE: Record<Exclude<NotLearned, null>, string> = {
   price: " (no la guardé porque es de precios)",

@@ -478,6 +478,15 @@ describe("runConversation", () => {
       );
     });
 
+    it("stays quiet while the chat's bot is off", async () => {
+      const { t, c } = await setup();
+      await ownerSql`update contacts set bot_off = true where id = ${c.id}`;
+      await say(t.id, c.id, "customer", "Hola, ¿qué me recomendás?");
+      const send = sendOk();
+      expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), send })).toBe("skipped:paused");
+      expect(send).not.toHaveBeenCalled();
+    });
+
     it("stays quiet while the conversation is paused, and answers new messages once the pause is over", async () => {
       const { t, c } = await setup();
       await ownerSql`update contacts set bot_paused_until = now() + interval '1 hour' where id = ${c.id}`;

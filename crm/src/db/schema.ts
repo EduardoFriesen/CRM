@@ -50,6 +50,11 @@ export const contacts = pgTable(
     stage: stage().notNull().default("consulta"),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
     botPausedUntil: timestamp("bot_paused_until", { withTimezone: true }),
+    // Off until someone turns it back on (no expiry, unlike the admin's pause).
+    botOff: boolean("bot_off").notNull().default(false),
+    // Set when the bot handed the chat to a person without a sale: the card shows it in red.
+    attentionReason: text("attention_reason"),
+    attentionAt: timestamp("attention_at", { withTimezone: true }),
     // Off the board (null = on it); a customer message reopens it as a new conversation.
     closedAt: timestamp("closed_at", { withTimezone: true }),
     // The bot's conversation starts here after a reopen.

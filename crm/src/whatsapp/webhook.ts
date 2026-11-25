@@ -158,7 +158,7 @@ async function storeMessage(tenantId: string, d: Upsert): Promise<void> {
           lastMessageAt: sql`greatest(${contacts.lastMessageAt}, excluded.last_message_at)`,
         },
       })
-      .returning({ id: contacts.id, botPausedUntil: contacts.botPausedUntil });
+      .returning({ id: contacts.id, botPausedUntil: contacts.botPausedUntil, botOff: contacts.botOff });
 
     await tx
       .insert(messages)
@@ -183,7 +183,7 @@ async function storeMessage(tenantId: string, d: Upsert): Promise<void> {
   // Only customers' messages wake the bot, and only while it is on and the chat isn't
   // paused: messages that arrive meanwhile are never answered later. A queue outage must
   // not lose the message.
-  if (contact.botPausedUntil && contact.botPausedUntil > new Date()) return;
+  if (contact.botOff || (contact.botPausedUntil && contact.botPausedUntil > new Date())) return;
   try {
     if (await isBotActive(tenantId)) await enqueueReply(tenantId, contact.id);
   } catch (e) {

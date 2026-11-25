@@ -164,6 +164,14 @@ describe("webhook → bot queue", () => {
     expect(enqueue).not.toHaveBeenCalled();
   });
 
+  it("does not queue for a chat whose bot was turned off", async () => {
+    await agent(true);
+    const jid = "5491100000109@s.whatsapp.net";
+    await ownerSql`insert into contacts (tenant_id, jid, last_message_at, bot_off) values (${botTenant.id}, ${jid}, now(), true)`;
+    await handleEvolutionEvent(botTenant.slug, SECRET, incoming(jid));
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
   it("never queues the business's own messages", async () => {
     await agent(true);
     await handleEvolutionEvent(botTenant.slug, SECRET, incoming("5491100000103@s.whatsapp.net", true));
@@ -195,7 +203,10 @@ describe("reopening", () => {
   it("a customer message reopens a closed contact as a new consulta", async () => {
     const jid = "5491100000101@s.whatsapp.net";
     await seed(jid, "postventa", { closed: true, paused: true });
+    await ownerSql`update contacts set bot_off = true, attention_reason = 'reclamo', attention_at = now() where tenant_id = ${tenant.id} and jid = ${jid}`;
     await handleEvolutionEvent(tenant.slug, SECRET, upsert({ remoteJid: jid }));
+    const [cleared] = await ownerSql`select bot_off, attention_reason, attention_at from contacts where tenant_id = ${tenant.id} and jid = ${jid}`;
+    expect(cleared).toEqual({ bot_off: false, attention_reason: null, attention_at: null });
     expect(await state(jid)).toMatchObject({ stage: "consulta", closed_at: null, bot_paused_until: null });
     expect((await state(jid)).reopened_at).not.toBeNull();
     const [{ consulta_since }] = await ownerSql<{ consulta_since: Date | null }[]>`

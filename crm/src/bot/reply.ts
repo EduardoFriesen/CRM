@@ -241,7 +241,7 @@ export async function runConversation(
 
   const conv = await loadConversation(tenantId, contactId, now);
   if (!conv.contact || !conv.instance) return "skipped:disabled";
-  if (conv.contact.botPausedUntil && conv.contact.botPausedUntil > now) return "skipped:paused";
+  if (conv.contact.botOff || (conv.contact.botPausedUntil && conv.contact.botPausedUntil > now)) return "skipped:paused";
   if (conv.recent.at(-1)?.author !== "customer") return "skipped:not-customer-last";
   if (conv.botLastHour >= MAX_BOT_REPLIES_PER_HOUR) return "skipped:rate-limit";
 
@@ -363,7 +363,7 @@ async function relayToCustomer(
   if (!rt || !rt.enabled || rt.keyStatus === "invalid") return "skipped:disabled";
   const conv = await loadConversation(tenantId, contactId, now);
   if (!conv.contact || !conv.instance) return "skipped:disabled";
-  if (conv.contact.botPausedUntil && conv.contact.botPausedUntil > now) return "skipped:paused";
+  if (conv.contact.botOff || (conv.contact.botPausedUntil && conv.contact.botPausedUntil > now)) return "skipped:paused";
   if (conv.botLastHour >= MAX_BOT_REPLIES_PER_HOUR) return "skipped:rate-limit";
 
   const started = Date.now();

@@ -5,7 +5,7 @@ import { recordAgentError } from "@/agent/config";
 import { searchCatalog } from "@/catalog/catalog";
 import { withTenant } from "@/db/client";
 import { contacts, escalations, type Stage } from "@/db/schema";
-import { escalationText, handoffText } from "./admin-messages";
+import { attentionText, escalationText, handoffText } from "./admin-messages";
 import { answerFaq } from "./faq/answers";
 import { LEARNABLE, saveExample } from "./faq/examples";
 import { allowedIn, isComplaint, namesOtherDetail } from "./faq/scope";
@@ -57,6 +57,24 @@ export async function handOff(
   );
   try {
     await opts.notify?.(handoffText(await contactInfo(tenantId, contactId), reason));
+  } catch {
+    await recordAgentError(tenantId, "HANDOFF_NOTIFY");
+  }
+}
+
+// A person must step in without a sale (stock shortfall, complaint, asks for someone): the
+// stage stays, the bot goes off until turned back on, the card turns red and the admin hears.
+export async function requestAttention(
+  tenantId: string,
+  contactId: string,
+  reason: string,
+  opts: Pick<ToolOptions, "notify">,
+): Promise<void> {
+  await withTenant(tenantId, (tx) =>
+    tx.update(contacts).set({ botOff: true, attentionReason: reason.trim().slice(0, 300), attentionAt: sql`now()` }).where(eq(contacts.id, contactId)),
+  );
+  try {
+    await opts.notify?.(attentionText(await contactInfo(tenantId, contactId), reason));
   } catch {
     await recordAgentError(tenantId, "HANDOFF_NOTIFY");
   }

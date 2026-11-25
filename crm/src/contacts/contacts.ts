@@ -11,6 +11,9 @@ export type BoardContact = {
   lastMessageAt: Date | null;
   lastMessage: string | null;
   botPausedUntil: Date | null;
+  botOff: boolean;
+  attentionReason: string | null;
+  pendingOrderId: string | null;
   hasDeliveredOrder: boolean;
 };
 export type Board = Record<Stage, BoardContact[]>;
@@ -32,6 +35,11 @@ export async function listBoard(tenantId: string): Promise<Board> {
         stage: contacts.stage,
         lastMessageAt: contacts.lastMessageAt,
         botPausedUntil: contacts.botPausedUntil,
+        botOff: contacts.botOff,
+        attentionReason: contacts.attentionReason,
+        pendingOrderId: sql<string | null>`(
+          select o.id from orders o where o.contact_id = "contacts"."id" and o.status = 'pending'
+          order by o.delivery_date asc limit 1)`,
         hasDeliveredOrder: sql<boolean>`exists (
           select 1 from orders o where o.contact_id = "contacts"."id" and o.status = 'delivered')`,
         // Columns are qualified by hand: drizzle renders bare names inside sql``, and an
@@ -87,12 +95,16 @@ export async function setContactStage(
 
 const contactId = z.uuid();
 
-export async function reactivateBot(tenantId: string, id: string): Promise<Result<{ id: string }>> {
+export const reactivateBot = (tenantId: string, id: string) => setBotOff(tenantId, id, false);
+
+// Off: the bot stays quiet in this chat until turned back on. On: also ends a pause and an
+// attention, so the card goes back to normal.
+export async function setBotOff(tenantId: string, id: string, off: boolean): Promise<Result<{ id: string }>> {
   if (!contactId.safeParse(id).success) return fail("NOT_FOUND", "No encontramos ese cliente");
   const [row] = await withTenant(tenantId, (tx) =>
     tx
       .update(contacts)
-      .set({ botPausedUntil: null })
+      .set(off ? { botOff: true } : { botOff: false, botPausedUntil: null, attentionReason: null, attentionAt: null })
       .where(and(eq(contacts.id, id), eq(contacts.tenantId, tenantId)))
       .returning({ id: contacts.id }),
   );
@@ -132,7 +144,7 @@ export async function closeContact(tenantId: string, id: string): Promise<Result
 export async function reopenContact(tx: Tx, tenantId: string, jid: string, at: Date): Promise<void> {
   await tx
     .update(contacts)
-    .set({ closedAt: null, reopenedAt: at, consultaSince: at, stage: "consulta", botPausedUntil: null })
+    .set({ closedAt: null, reopenedAt: at, consultaSince: at, stage: "consulta", botPausedUntil: null, botOff: false, attentionReason: null, attentionAt: null })
     .where(
       and(
         eq(contacts.tenantId, tenantId),
