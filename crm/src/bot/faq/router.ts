@@ -1,4 +1,4 @@
-import { generateText, InvalidToolInputError, NoSuchToolError, ToolChoiceViolationError, tool, type LanguageModel } from "ai";
+import { generateText, InvalidToolInputError, NoSuchToolError, ToolChoiceViolationError, tool, wrapLanguageModel, type LanguageModel } from "ai";
 import { z } from "zod";
 import { toModelMessages, type HistoryTurn } from "@/bot/history";
 import type { TurnUsage } from "@/bot/reply";
@@ -57,9 +57,24 @@ export async function routeMessage(
   model: LanguageModel,
   turns: HistoryTurn[],
 ): Promise<{ call: RouterCall; usage: TurnUsage }> {
+  // The SDK throws on malformed output and drops the usage with it; read it off the raw provider result.
+  const usage: TurnUsage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+  const metered = wrapLanguageModel({
+    model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
+    middleware: {
+      specificationVersion: "v4",
+      wrapGenerate: async ({ doGenerate }) => {
+        const res = await doGenerate();
+        usage.inputTokens += res.usage.inputTokens.total ?? 0;
+        usage.outputTokens += res.usage.outputTokens.total ?? 0;
+        usage.cachedTokens += res.usage.inputTokens.cacheRead ?? 0;
+        return res;
+      },
+    },
+  });
   try {
     const r = await generateText({
-      model,
+      model: metered,
       instructions: INSTRUCTIONS,
       messages: toModelMessages(turns.slice(-ROUTER_TURNS), { toolCalls: false }),
       tools: TOOLS,
@@ -67,19 +82,14 @@ export async function routeMessage(
       maxOutputTokens: 200,
       maxRetries: 0,
     });
-    const usage: TurnUsage = {
-      inputTokens: r.usage.inputTokens ?? 0,
-      outputTokens: r.usage.outputTokens ?? 0,
-      cachedTokens: r.usage.inputTokenDetails?.cacheReadTokens ?? 0,
-    };
     const tc = r.toolCalls[0];
-    const schema = tc && SCHEMAS[tc.toolName as keyof typeof SCHEMAS];
+    const schema = tc && tc.toolName in SCHEMAS ? SCHEMAS[tc.toolName as keyof typeof SCHEMAS] : undefined;
     const parsed = schema?.safeParse(tc.input);
     return { call: parsed?.success ? ({ fn: tc.toolName, args: parsed.data } as RouterCall) : COMPLEX, usage };
   } catch (e) {
     // Malformed model output is a routing miss, not a provider failure.
     if (NoSuchToolError.isInstance(e) || InvalidToolInputError.isInstance(e) || ToolChoiceViolationError.isInstance(e)) {
-      return { call: COMPLEX, usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 } };
+      return { call: COMPLEX, usage };
     }
     throw e;
   }

@@ -50,12 +50,16 @@ describe("routeMessage", () => {
   });
 
   it("unknown tool or plain text falls back to complex", async () => {
-    const unknown = new MockLanguageModelV4({ doGenerate: call("nope", {}) });
-    expect((await routeMessage(unknown, turns(1))).call.fn).toBe("complex");
+    const unknown = new MockLanguageModelV4({ doGenerate: call("nope", {}, mkUsage(10, 2)) });
+    const u = await routeMessage(unknown, turns(1));
+    expect(u.call.fn).toBe("complex");
+    expect(u.usage).toEqual({ inputTokens: 10, outputTokens: 2, cachedTokens: 0 });
     const plain = new MockLanguageModelV4({
-      doGenerate: { content: [{ type: "text", text: "hola" }], finishReason: { unified: "stop", raw: undefined }, usage: mkUsage(), warnings: [] },
+      doGenerate: { content: [{ type: "text", text: "hola" }], finishReason: { unified: "stop", raw: undefined }, usage: mkUsage(10, 2), warnings: [] },
     });
-    expect((await routeMessage(plain, turns(1))).call.fn).toBe("complex");
+    const p = await routeMessage(plain, turns(1));
+    expect(p.call.fn).toBe("complex");
+    expect(p.usage).toEqual({ inputTokens: 10, outputTokens: 2, cachedTokens: 0 });
   });
 
   it("reports usage", async () => {
