@@ -165,6 +165,17 @@ export async function saveAgentConfig(
   if (!unchanged) await recordUsage(tenantId, { requests: 1 }).catch(() => {});
   const check = result.status;
   if (check === "invalid" && !unchanged) return fail("KEY_INVALID", "El proveedor rechazó la API key");
+  // A new router model is checked like the main one, but only when the key works: otherwise
+  // a failure says nothing about the model. Quota means the provider knows it.
+  const router = routerModel || null;
+  if (router && router !== data.model && (!unchanged || router !== existing.routerModel) && check === "valid") {
+    const r = await verify({ ...settings, model: router });
+    await recordUsage(tenantId, { requests: 1 }).catch(() => {});
+    const status = typeof r === "string" ? r : r.status;
+    if (status !== "valid" && status !== "quota") {
+      return fail("VALIDATION", "Revisá la configuración del agente", { routerModel: ["El proveedor no reconoce ese modelo"] });
+    }
+  }
   const keyStatus: KeyStatus = check === "quota" ? "valid" : check;
   // A fresh check replaces the last error: quota exhausted is flagged, a clean pass clears it.
   const lastError = unchanged
@@ -179,7 +190,7 @@ export async function saveAgentConfig(
 
   const values = {
     ...data,
-    routerModel: routerModel || null,
+    routerModel: router,
     baseUrl,
     apiKeyEnc: encrypt(apiKey),
     apiKeyLast4: local ? "" : apiKey.slice(-4),

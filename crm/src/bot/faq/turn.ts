@@ -99,7 +99,9 @@ export async function answerTurn(
   return { ...r, text: intro + answer };
 }
 
-// The router call is metered and its errors classified exactly like the main model's.
+// The router call is metered and its errors classified like the main model's, except that a
+// permanent error (unknown model, no tool support…) is recorded and routes to the full bot:
+// a misconfigured router model must not silence the bot.
 async function route(tenantId: string, model: LanguageModel, turns: HistoryTurn[]) {
   try {
     const routed = await routeMessage(model, turns);
@@ -107,6 +109,7 @@ async function route(tenantId: string, model: LanguageModel, turns: HistoryTurn[
     return routed;
   } catch (e) {
     await meter(tenantId, { requests: 1 });
-    return classifyModelError(tenantId, e);
+    const skip = await classifyModelError(tenantId, e);
+    return skip === "skipped:model-error" ? { call: { fn: "complex", args: {} } as const, usage: zero() } : skip;
   }
 }

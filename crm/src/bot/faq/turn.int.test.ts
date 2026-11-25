@@ -119,7 +119,7 @@ describe("answerTurn", () => {
     expect(i.runComplex).toHaveBeenCalledOnce();
   });
 
-  it("passes a skipped router call through without running the main model", async () => {
+  it("falls back to the full bot when the router model is unusable (unknown model, no tools)", async () => {
     const t = await makeTenant();
     const { APICallError } = await import("ai");
     const router = new MockLanguageModelV4({
@@ -128,7 +128,7 @@ describe("answerTurn", () => {
       },
     });
     const i = input(customer("me contas como es el tema de los pedidos grandes para eventos"), router);
-    expect(await answerTurn(t.id, i)).toBe("skipped:model-error");
-    expect(i.runComplex).not.toHaveBeenCalled();
+    expect(await answerTurn(t.id, i)).toMatchObject({ path: "complex", fn: null, text: "respuesta compleja", routerModel: "mock-model-id" });
+    expect(i.runComplex).toHaveBeenCalledOnce();
   });
 });

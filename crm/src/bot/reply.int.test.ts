@@ -625,6 +625,22 @@ describe("runConversation", () => {
       expect(e).toEqual({ path: "complex", input_tokens: 2, router_input_tokens: 1, model: "m", router_model: "mock-model-id" });
     });
 
+    it("answers with the full bot and records the error when the router model does not exist", async () => {
+      const { t, c } = await setup();
+      await say(t.id, c.id, "customer", "che cuanto sale el pan");
+      const routerModel = new MockLanguageModelV4({
+        doGenerate: async () => {
+          throw new APICallError({ message: "model not found", url: "https://x", requestBodyValues: {}, statusCode: 404, isRetryable: false });
+        },
+      });
+      const model = new MockLanguageModelV4({ doGenerate: text("Sale $2.500.") });
+      const send = sendOk();
+      expect(await runConversation(t.id, c.id, { model, routerModel, send })).toBe("sent");
+      expect(send).toHaveBeenCalledWith(t.slug, c.jid, "Sale $2.500.");
+      expect((await getAgentView(t.id))?.lastErrorCode).toBe("HTTP_404");
+      expect(await events(t.id)).toMatchObject([{ path: "complex", outcome: "sent" }]);
+    });
+
     it("stops on an exhausted quota in the router without calling the main model", async () => {
       const { t, c } = await setup();
       await say(t.id, c.id, "customer", "che cuanto sale el pan");

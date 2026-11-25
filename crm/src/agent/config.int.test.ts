@@ -31,6 +31,30 @@ describe("agent config", () => {
     expect((await getAgentRuntime(t.id))?.routerModel).toBe("claude-haiku-5-5");
   });
 
+  it("refuses a router model the provider does not recognize", async () => {
+    const t = await makeTenant();
+    const verify = vi.fn(async (s: { model: string }) =>
+      s.model === "no-existe" ? { status: "unverified" as const, code: "HTTP_404" } : { status: "valid" as const, code: null },
+    );
+    expect(await saveAgentConfig(t.id, { ...base, routerModel: "no-existe" }, verify)).toMatchObject({
+      success: false,
+      error: { code: "VALIDATION", details: { routerModel: ["El proveedor no reconoce ese modelo"] } },
+    });
+    expect(await getAgentView(t.id)).toBeNull();
+    // Saved once with a good router model, a later change to a bad one is checked too.
+    expect(await saveAgentConfig(t.id, { ...base, routerModel: "claude-haiku-5-5" }, verify)).toMatchObject({ success: true });
+    expect(await saveAgentConfig(t.id, { ...base, apiKey: "", routerModel: "no-existe" }, verify)).toMatchObject({ success: false });
+    expect((await getAgentView(t.id))?.routerModel).toBe("claude-haiku-5-5");
+  });
+
+  it("does not recheck an unchanged router model", async () => {
+    const t = await makeTenant();
+    await saveAgentConfig(t.id, { ...base, routerModel: "r1" }, valid);
+    const verify = vi.fn(valid);
+    expect(await saveAgentConfig(t.id, { ...base, apiKey: "", routerModel: "r1", tone: "otro" }, verify)).toMatchObject({ success: true });
+    expect(verify).not.toHaveBeenCalled();
+  });
+
   it("stores the key encrypted and never returns it", async () => {
     const t = await makeTenant();
     const r = await saveAgentConfig(t.id, base, valid);
