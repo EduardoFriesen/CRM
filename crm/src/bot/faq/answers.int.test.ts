@@ -168,7 +168,7 @@ describe("answerFaq", () => {
     await add(t.id, "Gramilla", "8000", "0");
     for (const product of ["kikuyo", "gramilla"]) {
       const out = await answerFaq(t.id, { fn: "quote", args: { items: [{ product, quantity: 300 }] } }, () => 0);
-      expect(out).toMatchObject({ handoff: expect.stringContaining("300") });
+      expect(out).toMatchObject({ attention: expect.stringContaining("300") });
       const text = (out as { text: string }).text;
       expect(text).toMatch(/no tenemos esa cantidad/i);
       expect(text).not.toMatch(/120|\b0\b/);
@@ -238,7 +238,7 @@ describe("answerFaq", () => {
 
   it("unclear, greeting and handoff always answer", async () => {
     const t = await makeTenant();
-    for (const fn of ["unclear", "greeting", "farewell", "handoff"] as const) {
+    for (const fn of ["unclear", "greeting", "farewell", "handoff", "attention"] as const) {
       const out = await answerFaq(t.id, { fn, args: {} });
       expect(out).toBeTruthy();
       expect(out).not.toContain("{");

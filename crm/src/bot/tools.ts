@@ -16,7 +16,7 @@ const FALLBACK = { ok: false, fallback: "no tengo ese dato, te lo confirma algui
 export type ToolOptions = {
   dryRun: boolean;
   onStage?: (stage: Stage) => void;
-  onAdmin?: (kind: "ask" | "handoff", text: string) => void;
+  onAdmin?: (kind: "ask" | "handoff" | "attention", text: string) => void;
   /** Called once handoff_to_admin has run (also in dry run), so the reply is stored as a handoff. */
   onHandoff?: () => void;
   /** Sends a WhatsApp message to the tenant's admin; returns its id. */
@@ -199,6 +199,20 @@ export function makeTools(tenantId: string, contactId: string, opts: ToolOptions
           return { ok: true };
         }
         await handOff(tenantId, contactId, reason, opts);
+        return { ok: true };
+      },
+    }),
+    attention_to_admin: tool({
+      description:
+        "Avisa a una persona del equipo cuando el cliente hace un reclamo o pide hablar con alguien (sin compra). El bot deja de responder en este chat. Después decile que le escribe alguien del equipo.",
+      inputSchema: z.object({ reason: z.string().trim().min(1).max(300).describe("Motivo breve: qué reclama o qué necesita") }),
+      execute: async ({ reason }) => {
+        opts.onHandoff?.();
+        if (opts.dryRun) {
+          opts.onAdmin?.("attention", reason);
+          return { ok: true };
+        }
+        await requestAttention(tenantId, contactId, reason, opts);
         return { ok: true };
       },
     }),

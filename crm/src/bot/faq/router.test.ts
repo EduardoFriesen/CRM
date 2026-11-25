@@ -32,7 +32,7 @@ describe("routeMessage", () => {
     expect(c.toolChoice?.type).toBe("required");
     expect(c.maxOutputTokens).toBe(200);
     expect(c.tools?.map((t) => t.name).sort()).toEqual(
-      ["catalog", "complex", "farewell", "handoff", "hours", "location", "order_status", "payment_methods", "price", "quote", "shipping", "stock", "unclear"],
+      ["attention", "catalog", "complex", "farewell", "handoff", "hours", "location", "order_status", "payment_methods", "price", "quote", "shipping", "stock", "unclear"],
     );
   });
 

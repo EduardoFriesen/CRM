@@ -586,6 +586,32 @@ describe("runConversation", () => {
       expect(await events(t.id)).toEqual([{ path: "faq", fn: "price", outcome: "sent", router_input_tokens: 1 }]);
     });
 
+    it("attention keeps the stage, turns the chat's bot off and tells the admin", async () => {
+      const { t, c } = await setup({ discloseAi: false });
+      await say(t.id, c.id, "customer", "mi pedido llego roto");
+      const send = sendOk();
+      expect(await runConversation(t.id, c.id, { model: new MockLanguageModelV4({ doGenerate: text("x") }), routerModel: router("attention", { reason: "Llegó roto" }), send })).toBe("sent");
+      expect((await ownerSql`select stage, bot_off, attention_reason, bot_paused_until from contacts where id = ${c.id}`)[0]).toEqual({
+        stage: "consulta",
+        bot_off: true,
+        attention_reason: "Llegó roto",
+        bot_paused_until: null,
+      });
+      expect(send).toHaveBeenCalledWith(t.slug, ADMIN_JID, expect.stringContaining("necesita atención: Llegó roto."));
+    });
+
+    it("the main model's attention tool keeps the stage and turns the bot off", async () => {
+      const { t, c } = await setup({ discloseAi: false });
+      await say(t.id, c.id, "customer", "quiero hablar con alguien por un problema");
+      const model = new MockLanguageModelV4({
+        doGenerate: [toolCall("attention_to_admin", { reason: "Quiere hablar con una persona" }), text("Te escribe alguien del equipo.")],
+      });
+      const send = sendOk();
+      await runConversation(t.id, c.id, { model, routerModel: router("complex", {}), send });
+      expect((await ownerSql`select stage, bot_off from contacts where id = ${c.id}`)[0]).toEqual({ stage: "consulta", bot_off: true });
+      expect(send).toHaveBeenCalledWith(t.slug, ADMIN_JID, expect.stringContaining("necesita atención"));
+    });
+
     it("does not send a template over an admin who wrote meanwhile", async () => {
       const { t, c } = await setup({ discloseAi: false });
       await createProduct(t.id, { name: "Pan de campo", price: "2500" });

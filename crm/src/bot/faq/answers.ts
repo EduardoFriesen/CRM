@@ -11,7 +11,8 @@ import { fill, type TemplateKey } from "./templates";
 import type { FaqCall, QuoteItem } from "./types";
 
 /** Customer text, or text plus the reason to hand the conversation to a person. */
-export type FaqAnswer = string | { text: string; handoff: string };
+/** `attention`: a person must step in (the reason for the admin). */
+export type FaqAnswer = string | { text: string; attention: string };
 
 const MAX_LISTED = 3;
 const MAX_CATALOG = 10;
@@ -31,6 +32,8 @@ export async function answerFaq(tenantId: string, call: FaqCall, pick?: () => nu
     case "farewell":
     case "handoff":
       return fill(call.fn, {}, pick);
+    case "attention":
+      return fill("handoff", {}, pick);
     case "price":
     case "stock":
       return answerProduct(tenantId, call, pick);
@@ -85,7 +88,7 @@ async function answerQuote(tenantId: string, items: QuoteItem[], pick?: () => nu
     if (!p) return null;
     const qty = quantity.format(item.quantity);
     if (p.stock !== null && item.quantity > p.stock) {
-      return { text: fill("quote_short", {}, pick), handoff: `Pidió ${qty} de ${p.name} y no hay stock suficiente.` };
+      return { text: fill("quote_short", {}, pick), attention: `Pidió ${qty} de ${p.name} y no hay stock suficiente.` };
     }
     const cents = Math.round(Number(p.price) * 100 * item.quantity);
     total += cents;

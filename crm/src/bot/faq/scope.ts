@@ -5,7 +5,7 @@ import { exampleKey } from "./examples";
 
 // Postventa: what a customer who already bought may ask. Product questions go to the full bot,
 // which can move them back to Consulta.
-const POSTVENTA_FNS = new Set(["order_status", "hours", "location", "payment_methods", "shipping", "greeting", "farewell", "learned", "handoff", "unclear"]);
+const POSTVENTA_FNS = new Set(["order_status", "hours", "location", "payment_methods", "shipping", "greeting", "farewell", "learned", "attention", "unclear"]);
 
 export function allowedIn(stage: Stage, fn: string): boolean {
   if (stage === "venta") return false;

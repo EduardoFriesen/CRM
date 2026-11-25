@@ -66,6 +66,8 @@ export async function answerTurn(
     routerModel: LanguageModel | null;
     runComplex: () => Promise<{ text: string; usage: TurnUsage } | SkipOutcome>;
     doHandoff: (reason: string) => Promise<void>;
+    /** A person must step in without a sale: the stage stays and the bot goes off. */
+    doAttention: (reason: string) => Promise<void>;
     pick?: () => number;
   },
 ): Promise<TurnResult> {
@@ -117,9 +119,13 @@ export async function answerTurn(
   if (out === undefined) out = await answerFaq(tenantId, call, input.pick, input.contactId);
   if (out === null) return complex(r);
   const answer = typeof out === "string" ? out : out.text;
-  const reason = call.fn === "handoff" ? (call.args.reason ?? "El cliente quiere avanzar con una compra") : typeof out === "string" ? null : out.handoff;
-  if (reason !== null) {
-    await input.doHandoff(reason);
+  const attention =
+    call.fn === "attention" ? (call.args.reason ?? "El cliente pide hablar con una persona") : typeof out === "string" ? null : out.attention;
+  if (attention !== null) {
+    await input.doAttention(attention);
+    r = { ...r, path: "handoff", handoff: true };
+  } else if (call.fn === "handoff") {
+    await input.doHandoff(call.args.reason ?? "El cliente quiere avanzar con una compra");
     r = { ...r, path: "handoff", handoff: true };
   }
   // A goodbye needs no introduction.

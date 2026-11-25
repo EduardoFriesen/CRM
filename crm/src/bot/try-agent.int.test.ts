@@ -217,6 +217,23 @@ describe("tryAgent", () => {
     expect(r).toMatchObject({ success: true, data: { path: "faq", adminNote: "(respondió con plantilla: hours)" } });
   });
 
+  it("keeps an attention as a dry run", async () => {
+    const t = await cfg();
+    const r = await tryAgent(t.id, [{ role: "user", text: "mi pedido llego roto" }], {
+      model: failing(),
+      routerModel: new MockLanguageModelV4({
+        doGenerate: {
+          content: [{ type: "tool-call", toolCallId: "r1", toolName: "attention", input: JSON.stringify({ reason: "Llegó roto" }) }],
+          finishReason: { unified: "tool-calls", raw: undefined },
+          usage,
+          warnings: [],
+        },
+      }),
+    });
+    expect(r).toMatchObject({ success: true, data: { path: "handoff", handoff: true, adminNote: "(el bot avisaría al admin que necesita atención: Llegó roto)" } });
+    expect(await ownerSql`select 1 from contacts where tenant_id = ${t.id} and bot_off`).toHaveLength(0);
+  });
+
   it("reports an invalid key when the router rejects it", async () => {
     const t = await cfg();
     const routerModel = new MockLanguageModelV4({

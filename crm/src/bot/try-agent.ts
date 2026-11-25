@@ -18,6 +18,7 @@ import { asksForSensitiveData } from "./sensitive-guard";
 import { makeTools } from "./tools";
 
 const HANDOFF_NOTE = "(el bot pasaría la charla a alguien del equipo)";
+const attentionNote = (reason: string) => `(el bot avisaría al admin que necesita atención: ${reason})`;
 
 const historyInput = z
   .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().trim().min(1).max(1000), handoff: z.boolean().optional() }))
@@ -65,13 +66,18 @@ export async function tryAgent(
             dryRun: true,
             onStage: (s) => (stage = s),
             onHandoff: () => (handoff = true),
-            onAdmin: (kind, text) => (adminNote = kind === "ask" ? `(el bot consultaría al admin: ${text})` : HANDOFF_NOTE),
+            onAdmin: (kind, text) =>
+              (adminNote = kind === "ask" ? `(el bot consultaría al admin: ${text})` : kind === "attention" ? attentionNote(text) : HANDOFF_NOTE),
           }),
         }),
       // A template handoff stays a dry run: no escalation, no pause, no notification.
       doHandoff: async () => {
         handoff = true;
         adminNote = HANDOFF_NOTE;
+      },
+      doAttention: async (reason) => {
+        handoff = true;
+        adminNote = attentionNote(reason);
       },
     });
     if (turn.skip) {

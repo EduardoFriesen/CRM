@@ -39,6 +39,7 @@ function input(turns: HistoryTurn[], router: MockLanguageModelV4 | null, extra: 
     routerModel: router,
     runComplex: vi.fn(async () => complexReply),
     doHandoff: vi.fn(async () => {}),
+    doAttention: vi.fn(async () => {}),
     ...extra,
   };
 }
@@ -84,14 +85,15 @@ describe("answerTurn", () => {
     expect(i.runComplex).toHaveBeenCalledOnce();
   });
 
-  it("a quote over the stock hands off to a person", async () => {
+  it("a quote over the stock asks a person for attention, without a sale", async () => {
     const t = await makeTenant();
     const r0 = await createProduct(t.id, { name: "Kikuyo", price: "10000", stock: "10" });
     if (!r0.success) throw new Error("setup failed");
     const i = input(customer("quiero 300 m2 de kikuyo"), routerFor("quote", { items: [{ product: "kikuyo", quantity: 300 }] }), { pick: () => 0 });
     const r = await answerTurn(t.id, i);
     expect(r).toMatchObject({ path: "handoff", fn: "quote", handoff: true });
-    expect(i.doHandoff).toHaveBeenCalledWith(expect.stringContaining("Kikuyo"));
+    expect(i.doAttention).toHaveBeenCalledWith(expect.stringContaining("Kikuyo"));
+    expect(i.doHandoff).not.toHaveBeenCalled();
     expect(typeof r !== "string" && r.text).toBe(fill("quote_short", {}, () => 0));
   });
 
@@ -114,6 +116,26 @@ describe("answerTurn", () => {
     expect(i.doHandoff).toHaveBeenCalledWith("Quiere encargar");
     expect(r).toMatchObject({ path: "handoff", fn: "handoff", handoff: true });
     expect(typeof r !== "string" && r.text).toBe(fill("handoff", {}, () => 0));
+  });
+
+  it("attention asks a person with its reason and answers with the handoff template", async () => {
+    const t = await makeTenant();
+    const i = input(customer("mi pedido llego roto"), routerFor("attention", { reason: "Reclamo: llegó roto" }), { pick: () => 0 });
+    const r = await answerTurn(t.id, i);
+    expect(i.doAttention).toHaveBeenCalledExactlyOnceWith("Reclamo: llegó roto");
+    expect(i.doHandoff).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ path: "handoff", fn: "attention", handoff: true });
+    expect(typeof r !== "string" && r.text).toBe(fill("handoff", {}, () => 0));
+  });
+
+  it("in postventa attention stays cheap and a sale handoff goes to the main model", async () => {
+    const t = await makeTenant();
+    const a = input(customer("mi pedido llego roto"), routerFor("attention", { reason: "Reclamo" }), { stage: "postventa" });
+    expect(await answerTurn(t.id, a)).toMatchObject({ fn: "attention" });
+    expect(a.doAttention).toHaveBeenCalledOnce();
+    const h = input(customer("quiero comprar otra"), routerFor("handoff", { reason: "Compra" }), { stage: "postventa" });
+    expect(await answerTurn(t.id, h)).toMatchObject({ path: "complex" });
+    expect(h.doHandoff).not.toHaveBeenCalled();
   });
 
   it("venta always goes to the main model, skipping prefilter and router", async () => {

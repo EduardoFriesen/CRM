@@ -6,6 +6,7 @@ export type FaqName =
   | "payment_methods"
   | "shipping"
   | "handoff"
+  | "attention"
   | "unclear"
   | "greeting"
   | "catalog"

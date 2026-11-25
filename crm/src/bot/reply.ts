@@ -14,7 +14,7 @@ import { toModelMessages, type HistoryTurn } from "./history";
 import { buildSystemPrompt } from "./prompt";
 import { enqueueReminder } from "./queue";
 import { asksForSensitiveData } from "./sensitive-guard";
-import { handOff, makeTools } from "./tools";
+import { handOff, makeTools, requestAttention } from "./tools";
 import { customerBlock } from "./faq/scope";
 import { answerTurn, emptyTurn, turnEvent, type TurnResult } from "./faq/turn";
 import { recordBotEvent } from "@/usage/events";
@@ -295,6 +295,10 @@ export async function runConversation(
     runComplex,
     doHandoff: async (reason) => {
       await handOff(tenantId, contactId, reason, { notify, pauseHours: rt.pauseHours });
+      handedOff = true;
+    },
+    doAttention: async (reason) => {
+      await requestAttention(tenantId, contactId, reason, { notify });
       handedOff = true;
     },
   });

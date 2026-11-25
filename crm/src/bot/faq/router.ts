@@ -29,6 +29,7 @@ const SCHEMAS = {
   payment_methods: none,
   shipping: z.object({ zone: z.string().max(100).optional() }),
   handoff: z.object({ reason: z.string().trim().min(1).max(300) }),
+  attention: z.object({ reason: z.string().trim().min(1).max(300) }),
   quote: z.object({
     items: z
       .array(z.object({ product: z.string().trim().min(1).max(100), quantity: z.number().positive().max(1_000_000) }))
@@ -49,7 +50,8 @@ const DESCRIPTIONS: Record<keyof typeof SCHEMAS, string> = {
   location: "The customer asks where the business is or how to get there.",
   payment_methods: "The customer asks which payment methods are accepted.",
   shipping: "General questions about whether you ship, zones or shipping cost (not complaints or questions about a specific order).",
-  handoff: "The customer wants to buy, pay, reserve, talk to a person or complain.",
+  handoff: "The customer wants to buy, pay or reserve.",
+  attention: "The customer complains or asks to talk to a person.",
   quote: "The customer asks the total for a quantity of one or more products, or says they want a quantity of a product.",
   catalog: "The customer asks to see the catalog, the price list or what products you sell (not one specific product).",
   farewell: "The message is only a goodbye, with no question or request.",
@@ -73,8 +75,9 @@ Elegí exactamente una función según el ÚLTIMO mensaje del cliente; el contex
 - quote: pide cuánto sale una cantidad de uno o más productos, o dice que quiere una cantidad ("quiero 300 m2 de kikuyo", "quiero comprar 2 panes"). Indicá cada producto y su cantidad como número.
 - catalog: pide ver el catálogo, la lista de precios o qué productos venden, sin nombrar uno.
 - farewell: SOLO una despedida (chau, hasta luego); si además pide algo, no es farewell.
-- order_status: pregunta cuándo llega, dónde está o en qué estado está SU pedido. Un reclamo (llegó mal, no llegó, falta algo) es handoff.
-- handoff: quiere comprar sin decir cantidad, pagar, reservar, hablar con una persona o hacer un reclamo (indicá el motivo).
+- order_status: pregunta cuándo llega, dónde está o en qué estado está SU pedido. Un reclamo (llegó mal, no llegó, falta algo) es attention.
+- handoff: quiere comprar sin decir cantidad, pagar o reservar (indicá el motivo).
+- attention: un reclamo o pide hablar con una persona (indicá el motivo).
 - unclear: mensaje demasiado vago para saber qué quiere.
 - complex: cualquier otra cosa que requiera una conversación.
 No inventes datos.`;

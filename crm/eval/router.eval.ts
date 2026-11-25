@@ -12,7 +12,7 @@ type Case = { text: string; before?: HistoryTurn[]; facts?: { question: string }
 
 const FACTS = [{ question: "¿Hacen factura A?" }, { question: "¿Tienen estacionamiento?" }];
 
-// Complaints and purchase/payment/reservation requests are `handoff` (see the router instructions).
+// Purchase/payment/reservation requests are `handoff`; complaints and asking for a person are `attention`.
 const cases: Case[] = [
   { text: "cuanto sale el pan de campo?", expected: "price" },
   { text: "q precio tiene la torta\nde chocolate", expected: "price" },
@@ -43,12 +43,12 @@ const cases: Case[] = [
   { text: "chau, gracias", expected: "farewell" },
   { text: "bueno me voy, hasta la proxima", expected: "farewell" },
   { text: "cuando me llega el pedido?", expected: "order_status" },
-  { text: "mi pedido llego roto", expected: "handoff" },
+  { text: "mi pedido llego roto", expected: "attention" },
   { text: "emiten factura a?", facts: FACTS, expected: "learned" },
   { text: "hay lugar para estacionar?", facts: FACTS, expected: "learned" },
   { text: "hacen factura B?", facts: FACTS, expected: "complex" },
-  { text: "mi envio no llego", expected: "handoff" },
-  { text: "quiero hablar con una persona", expected: "handoff" },
+  { text: "mi envio no llego", expected: "attention" },
+  { text: "quiero hablar con una persona", expected: "attention" },
   { text: "eso", expected: "unclear" },
   { text: "y de ese?", expected: "unclear" },
   { text: "hola\nme interesa", expected: "unclear" },
@@ -62,8 +62,8 @@ const cases: Case[] = [
   { text: "tiene gluten el pan de campo?", expected: "complex" },
   { text: "me recomendas algo para regalar a mi suegra?", expected: "complex" },
   // Held-out: added after the prompt was tuned, phrasings the instructions do not quote.
-  { text: "mi pedido llego mal", expected: "handoff" },
-  { text: "el paquete nunca me llego", expected: "handoff" },
+  { text: "mi pedido llego mal", expected: "attention" },
+  { text: "el paquete nunca me llego", expected: "attention" },
   { text: "tiene lactosa la torta?", expected: "complex" },
   { text: "ok gracias", expected: "silence" },
   { text: "dale 👍", expected: "silence" },
