@@ -17,6 +17,8 @@ describe("prefilter", () => {
 
   it("does not silence after a bot question", () => {
     expect(prefilter("dale", "¿Te lo reservo?")).toBeNull();
+    expect(prefilter("dale", "¿Lo querés? Avisame 😊")).toBeNull();
+    expect(prefilter("dale", "¿Te lo reservo? 😊")).toBeNull();
   });
 
   it("does not silence a batch with a real question", () => {

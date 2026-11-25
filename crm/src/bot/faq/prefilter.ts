@@ -7,7 +7,8 @@ export const MAX_RULE_WORDS = 8;
 /** Zero-token step: silence trivial messages, map obvious questions to an FAQ. */
 export function prefilter(text: string, lastBotText: string | null): Decision | null {
   const p = plain(text).trim();
-  const botAsked = lastBotText?.trim().endsWith("?") ?? false;
+  // A question anywhere counts: bots often add "Avisame" or an emoji after it.
+  const botAsked = lastBotText?.includes("?") ?? false;
   if (!botAsked && !p.includes("?") && p.split("\n").every((line) => TRIVIAL.test(line))) return { kind: "silence" };
 
   if (p.split(/\s+/).length > MAX_RULE_WORDS) return null;
