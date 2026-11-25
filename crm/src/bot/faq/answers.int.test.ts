@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { saveBusinessProfile } from "@/business/profile";
 import { createProduct } from "@/catalog/catalog";
-import { dropTenants, makeTenant, ownerSql } from "@/test/db";
+import { dropTenants, makeContact, makeTenant, ownerSql } from "@/test/db";
+import { fill } from "./templates";
 import { answerFaq } from "./answers";
 
 afterAll(async () => {
@@ -172,6 +173,39 @@ describe("answerFaq", () => {
       expect(text).toMatch(/no tenemos esa cantidad/i);
       expect(text).not.toMatch(/120|\b0\b/);
     }
+  });
+
+  const order = (tenantId: string, contactId: string, date: string, status = "pending", address = "Av. Siempre Viva 123", deliveredAt: string | null = null) =>
+    ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total, status, delivered_at)
+             values (${tenantId}, ${contactId}, ${date}, ${address}, 100, ${status}, ${deliveredAt})`;
+
+  it("order_status answers the nearest pending order of that contact", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await order(t.id, c.id, "2026-12-05", "pending", "Otra 1");
+    await order(t.id, c.id, "2026-11-28");
+    await order(t.id, c.id, "2026-11-27", "cancelled", "Cancelada 9");
+    const out = await answerFaq(t.id, { fn: "order_status", args: {} }, () => 0, c.id);
+    expect(out).toBe(fill("order_pending", { date: "sábado 28/11", address: "Av. Siempre Viva 123" }, () => 0));
+  });
+
+  it("order_status falls back to the latest delivered order", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await order(t.id, c.id, "2026-11-10", "delivered", "X", "2026-11-11T15:00:00Z");
+    await order(t.id, c.id, "2026-11-20", "delivered", "X", "2026-11-21T15:00:00Z");
+    const out = await answerFaq(t.id, { fn: "order_status", args: {} }, () => 0, c.id);
+    expect(out).toBe(fill("order_delivered", { date: "sábado 21/11" }, () => 0));
+  });
+
+  it("order_status is null without pending or delivered orders, or for another contact's orders", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    const other = await makeContact(t.id);
+    await order(t.id, other.id, "2026-11-28");
+    await order(t.id, c.id, "2026-11-28", "cancelled");
+    expect(await answerFaq(t.id, { fn: "order_status", args: {} }, () => 0, c.id)).toBeNull();
+    expect(await answerFaq(t.id, { fn: "order_status", args: {} }, () => 0)).toBeNull();
   });
 
   it("unclear, greeting and handoff always answer", async () => {

@@ -52,6 +52,7 @@ export async function tryAgent(
     const turn = await answerTurn(tenantId, {
       turns: parsed.data,
       stage: "consulta",
+      contactId: "",
       introduce: rt.discloseAi && parsed.data.length === 1,
       tenantName: tenant?.name ?? "",
       routerModel,

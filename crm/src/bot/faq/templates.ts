@@ -12,6 +12,8 @@ export type TemplateKey =
   | "unclear"
   | "greeting"
   | "farewell"
+  | "order_pending"
+  | "order_delivered"
   | "quote"
   | "quote_short"
   | "intro";
@@ -44,6 +46,8 @@ export const TEMPLATES: Record<TemplateKey, string[]> = {
     "No tenemos esa cantidad disponible ahora. Te paso con alguien del equipo para ver opciones.",
     "Esa cantidad no la tenemos disponible en este momento; ya le aviso a alguien del equipo para que te escriba.",
   ],
+  order_pending: ["Tu pedido está confirmado para el {date}, con entrega en {address}.", "Tu pedido sale el {date} a {address}."],
+  order_delivered: ["Tu pedido se entregó el {date}.", "Tu pedido quedó entregado el {date}."],
   farewell: ["¡Gracias por escribirnos! Cualquier cosa, acá estamos.", "¡Un gusto! Cuando necesites, escribinos."],
   greeting: ["¡Hola! ¿En qué te puedo ayudar?", "¡Buenas! Contame, ¿qué necesitás?", "¡Hola! ¿Qué estás buscando?"],
   intro: ["¡Hola! Soy el asistente de {tenant}. ¿En qué te puedo ayudar?", "¡Buenas! Te escribe el asistente de {tenant}. Contame, ¿qué necesitás?"],

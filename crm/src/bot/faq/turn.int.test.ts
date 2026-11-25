@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { saveBusinessProfile } from "@/business/profile";
 import { createProduct } from "@/catalog/catalog";
 import type { HistoryTurn } from "@/bot/history";
-import { dropTenants, makeTenant, ownerSql } from "@/test/db";
+import { dropTenants, makeContact, makeTenant, ownerSql } from "@/test/db";
 import { fill } from "./templates";
 import { answerTurn } from "./turn";
 
@@ -31,7 +31,8 @@ const complexReply = { text: "respuesta compleja", usage: { inputTokens: 100, ou
 function input(turns: HistoryTurn[], router: MockLanguageModelV4 | null, extra: Partial<Parameters<typeof answerTurn>[1]> = {}) {
   return {
     turns,
-    stage: "consulta" as const,
+    stage: "consulta" as "consulta" | "venta" | "postventa",
+    contactId: "",
     introduce: false,
     tenantName: "Panadería",
     routerModel: router,
@@ -114,14 +115,45 @@ describe("answerTurn", () => {
     expect(typeof r !== "string" && r.text).toBe(fill("handoff", {}, () => 0));
   });
 
-  it("outside consulta skips prefilter and router", async () => {
+  it("venta always goes to the main model, skipping prefilter and router", async () => {
     const t = await makeTenant();
     await saveBusinessProfile(t.id, { hours: "de 8 a 20" });
     const router = routerFor("hours", {});
-    const i = input(customer("a que hora abren?"), router, { stage: "postventa" });
+    const i = input(customer("a que hora abren?"), router, { stage: "venta" });
     const r = await answerTurn(t.id, i);
     expect(r).toMatchObject({ path: "complex", fn: null, text: "respuesta compleja", routerModel: null });
     expect(router.doGenerateCalls).toHaveLength(0);
+  });
+
+  it("in postventa the router answers order status", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2026-11-28', 'Av. Siempre Viva 123', 100)`;
+    const i = input(customer("cuando me llega?"), routerFor("order_status", {}), { stage: "postventa", contactId: c.id, pick: () => 0 });
+    const r = await answerTurn(t.id, i);
+    expect(r).toMatchObject({ path: "faq", fn: "order_status", text: fill("order_pending", { date: "sábado 28/11", address: "Av. Siempre Viva 123" }, () => 0) });
+  });
+
+  it("in postventa a product question goes to the main model", async () => {
+    const t = await makeTenant();
+    const i = input(customer("cuanto sale el pan?"), routerFor("price", { product: "pan" }), { stage: "postventa" });
+    expect(await answerTurn(t.id, i)).toMatchObject({ path: "complex", routerModel: "mock-model-id" });
+    expect(i.runComplex).toHaveBeenCalledOnce();
+  });
+
+  it("in postventa the rules still answer", async () => {
+    const t = await makeTenant();
+    await saveBusinessProfile(t.id, { hours: "de 8 a 20" });
+    const r = await answerTurn(t.id, input(customer("a que hora abren?"), null, { stage: "postventa" }));
+    expect(r).toMatchObject({ path: "prefilter", fn: "hours" });
+  });
+
+  it("in consulta order_status goes to the main model", async () => {
+    const t = await makeTenant();
+    const c = await makeContact(t.id);
+    await ownerSql`insert into orders (tenant_id, contact_id, delivery_date, address, total) values (${t.id}, ${c.id}, '2026-11-28', 'X', 100)`;
+    const i = input(customer("cuando me llega?"), routerFor("order_status", {}), { contactId: c.id });
+    expect(await answerTurn(t.id, i)).toMatchObject({ path: "complex" });
   });
 
   it("introduces itself on a template answer", async () => {

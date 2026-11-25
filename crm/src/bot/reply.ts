@@ -276,6 +276,7 @@ export async function runConversation(
   const turn = await answerTurn(tenantId, {
     turns: conv.recent.map(toTurn),
     stage,
+    contactId,
     introduce,
     tenantName: conv.tenantName,
     routerModel,

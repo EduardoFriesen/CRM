@@ -10,7 +10,8 @@ export type FaqName =
   | "greeting"
   | "catalog"
   | "quote"
-  | "farewell";
+  | "farewell"
+  | "order_status";
 
 export type QuoteItem = { product: string; quantity: number };
 

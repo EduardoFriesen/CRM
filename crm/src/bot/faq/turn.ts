@@ -50,13 +50,29 @@ export function turnEvent(contactId: string, outcome: string, r: TurnResult, mod
 
 /**
  * Produces the text for one customer turn: silence, a template answer (pre-filter rule or
- * router), or the full bot (`runComplex`). Only Consulta uses the cheap paths.
+ * router), or the full bot (`runComplex`). Consulta and Postventa use the cheap paths.
  */
+// Postventa: what a customer who already bought may ask. Product questions go to the full bot,
+// which can move them back to Consulta.
+const POSTVENTA_FNS = new Set(["order_status", "hours", "location", "payment_methods", "shipping", "greeting", "farewell", "learned", "handoff", "unclear"]);
+
+export function allowedIn(stage: Stage, fn: string): boolean {
+  if (stage === "venta") return false;
+  return stage === "postventa" ? POSTVENTA_FNS.has(fn) : fn !== "order_status";
+}
+
+/** The customer's messages after the last bot or admin turn, one per line. */
+export function customerBlock(turns: HistoryTurn[]): string {
+  const lastOther = turns.findLastIndex((t) => t.role !== "user");
+  return turns.slice(lastOther + 1).map((t) => t.text).join("\n");
+}
+
 export async function answerTurn(
   tenantId: string,
   input: {
     turns: HistoryTurn[];
     stage: Stage;
+    contactId: string;
     introduce: boolean;
     tenantName: string;
     routerModel: LanguageModel | null;
@@ -70,12 +86,12 @@ export async function answerTurn(
     const reply = await input.runComplex();
     return typeof reply === "string" ? { ...r, path: "complex", skip: reply } : { ...r, path: "complex", text: reply.text, usage: reply.usage };
   };
-  if (input.stage !== "consulta") return complex(base);
+  if (input.stage === "venta") return complex(base);
 
   const lastOther = input.turns.findLastIndex((t) => t.role !== "user");
-  const text = input.turns.slice(lastOther + 1).map((t) => t.text).join("\n");
-  const decision = prefilter(text, lastOther >= 0 ? input.turns[lastOther].text : null);
+  const decision = prefilter(customerBlock(input.turns), lastOther >= 0 ? input.turns[lastOther].text : null);
   if (decision?.kind === "silence") return { ...base, path: "silence" };
+  if (decision && !allowedIn(input.stage, decision.fn)) return complex(base);
 
   let call: FaqCall;
   let r: TurnResult;
@@ -88,11 +104,11 @@ export async function answerTurn(
     const routerModel = modelName(input.routerModel);
     if (typeof routed === "string") return { ...base, path: "faq", routerModel, skip: routed };
     r = { ...base, path: "faq", fn: routed.call.fn, routerModel, routerUsage: routed.usage };
-    if (routed.call.fn === "complex") return complex({ ...r, fn: null });
+    if (routed.call.fn === "complex" || !allowedIn(input.stage, routed.call.fn)) return complex({ ...r, fn: null });
     call = routed.call;
   }
 
-  const out = await answerFaq(tenantId, call, input.pick);
+  const out = await answerFaq(tenantId, call, input.pick, input.contactId);
   if (out === null) return complex(r);
   const answer = typeof out === "string" ? out : out.text;
   const reason = call.fn === "handoff" ? (call.args.reason ?? "El cliente quiere avanzar con una compra") : typeof out === "string" ? null : out.handoff;

@@ -1,5 +1,8 @@
+import { and, eq, inArray } from "drizzle-orm";
 import { getBusinessProfile } from "@/business/profile";
 import { matchProducts, searchCatalog } from "@/catalog/catalog";
+import { withTenant } from "@/db/client";
+import { orders } from "@/db/schema";
 import { formatPrice } from "@/lib/money";
 import { plain } from "@/lib/plain";
 import { fill, type TemplateKey } from "./templates";
@@ -19,7 +22,7 @@ const BUSINESS_FIELDS = {
 } as const satisfies Record<string, { field: string; key: string; template: TemplateKey }>;
 
 /** Final customer text for a classified question, from real data and templates only. `null` = no data to answer. */
-export async function answerFaq(tenantId: string, call: FaqCall, pick?: () => number): Promise<FaqAnswer | null> {
+export async function answerFaq(tenantId: string, call: FaqCall, pick?: () => number, contactId?: string): Promise<FaqAnswer | null> {
   switch (call.fn) {
     case "unclear":
     case "greeting":
@@ -31,6 +34,8 @@ export async function answerFaq(tenantId: string, call: FaqCall, pick?: () => nu
       return answerProduct(tenantId, call, pick);
     case "catalog":
       return answerCatalog(tenantId, pick);
+    case "order_status":
+      return contactId ? answerOrder(tenantId, contactId, pick) : null;
     case "quote":
       return answerQuote(tenantId, call.args.items ?? [], pick);
     default: {
@@ -83,6 +88,30 @@ async function answerQuote(tenantId: string, items: QuoteItem[], pick?: () => nu
     lines.push(`• ${p.name}: ${qty} × ${formatPrice(p.price)} = ${formatPrice(cents / 100)}`);
   }
   return fill("quote", { lines: lines.join("\n"), total: formatPrice(total / 100) }, pick);
+}
+
+const day = new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });
+// "sábado 28/11": built from parts, es-AR alone would give "sábado, 28-11".
+const formatDay = (d: Date) => {
+  const p = Object.fromEntries(day.formatToParts(d).map((x) => [x.type, x.value]));
+  return `${p.weekday} ${p.day}/${p.month}`;
+};
+
+// The pending order due soonest, else the last one delivered. Cancelled orders never answer.
+async function answerOrder(tenantId: string, contactId: string, pick?: () => number): Promise<string | null> {
+  const rows = await withTenant(tenantId, (tx) =>
+    tx
+      .select({ status: orders.status, deliveryDate: orders.deliveryDate, deliveredAt: orders.deliveredAt, address: orders.address })
+      .from(orders)
+      .where(and(eq(orders.contactId, contactId), inArray(orders.status, ["pending", "delivered"]))),
+  );
+  const [pending] = rows.filter((o) => o.status === "pending").sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate));
+  // A `date` column: noon UTC keeps the same calendar day in Buenos Aires.
+  if (pending) return fill("order_pending", { date: formatDay(new Date(`${pending.deliveryDate}T12:00:00Z`)), address: pending.address }, pick);
+  const [delivered] = rows
+    .flatMap((o) => (o.status === "delivered" && o.deliveredAt ? [o.deliveredAt] : []))
+    .sort((a, b) => b.getTime() - a.getTime());
+  return delivered ? fill("order_delivered", { date: formatDay(delivered) }, pick) : null;
 }
 
 async function answerProduct(tenantId: string, call: FaqCall, pick?: () => number): Promise<string | null> {
